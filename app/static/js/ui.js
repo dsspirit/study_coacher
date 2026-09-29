@@ -108,6 +108,14 @@ export const ICONS = {
 };
 
 // 快捷建元素：attrs 支持 class/text/html/style(对象)/dataset/onXxx 事件与普通属性
+// children 递归拍平：嵌套数组（如 .map() 的结果） historically 会被 String() 成
+// "[object HTMLSpanElement],…" 渲染出来（2026-09-30 作业详情页 topics 踩过）
+function flattenChildren(cs) {
+  if (cs == null || cs === false) return [];
+  if (Array.isArray(cs)) return cs.flatMap(flattenChildren);
+  return [cs];
+}
+
 export function el(tag, attrs = {}, children = []) {
   const n = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -120,8 +128,7 @@ export function el(tag, attrs = {}, children = []) {
     else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2), v);
     else n.setAttribute(k, v === true ? '' : v);
   }
-  for (const c of [].concat(children ?? [])) {
-    if (c == null || c === false) continue;
+  for (const c of flattenChildren(children)) {
     n.append(c.nodeType ? c : document.createTextNode(String(c)));
   }
   return n;

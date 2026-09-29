@@ -38,6 +38,13 @@ import gamify   # noqa: E402
 from scheduler import plan_check  # noqa: E402
 
 VERSION = "2.0"
+
+# 浏览器不请自来要的图标（终端日志里曾经的三个 404）：别名到 static/icons/
+FAVICON_ALIASES = {
+    "/favicon.ico": "icons/favicon-32.png",
+    "/apple-touch-icon.png": "icons/apple-touch-icon.png",
+    "/apple-touch-icon-precomposed.png": "icons/apple-touch-icon.png",
+}
 ZONE = Path.cwd()      # 以下全局态由 WorkbenchServer()/serve() 赋值
 PORT = 8765
 VAULT = None           # vault 根：自 zone 向上找 .obsidian 的父目录；找不到 = None
@@ -220,6 +227,8 @@ class Handler(BaseHTTPRequestHandler):
                 return fn(self, qs)
             if self.command == "GET" and path == "/":
                 return self._serve_index()
+            if self.command == "GET" and path in FAVICON_ALIASES:  # 浏览器自动请求的图标，别刷 404
+                return self._serve_static(FAVICON_ALIASES[path])
             if self.command == "GET" and path.startswith("/static/"):
                 return self._serve_static(path[len("/static/"):])
             known = any(p == path for _m, p in ROUTES)
