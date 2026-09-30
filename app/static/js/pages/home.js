@@ -253,7 +253,10 @@ export async function render(outlet) {
     return;
   }
   if (d.xp) window.dispatchEvent(new CustomEvent('lz-xp', { detail: d.xp })); // 刷新 header 徽章
+  const boxesP = boxCards(); // 三箱计数并行预取，不阻塞下面的卡片渲染
   if (d.tip) outlet.append(tipCard(d.tip));
+  const boxes = el('div', { class: 'grid-3' }); // 三箱一行：紧跟今日贴士
+  outlet.append(boxes);
   const recent = recentCard();
   if (recent) outlet.append(recent);
   const lag = lagNotice(d.plan_check);
@@ -263,7 +266,5 @@ export async function render(outlet) {
   outlet.append(calCard(d, inbox));
   const grid = el('div', { class: 'grid-2' }, [dueCard(d.due || []), xpCard(d.xp)]);
   outlet.append(grid);
-  const grid2 = el('div', { class: 'grid-3' }); // 三箱一行
-  for (const c of await boxCards()) grid2.append(c);
-  outlet.append(grid2);
+  for (const c of await boxesP) boxes.append(c); // 预取回来后填进已占位的行
 }
