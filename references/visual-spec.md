@@ -71,3 +71,8 @@
 - **首页计划与日历**：`.cal-wrap`（7:5 双栏，窄屏单列）；`.cal-grid` 7 列月历，`.cal-cell` 40px 直角格；热度条 `.cal-heat`（.h1 #83769C / .h2 accent / .h3 ok，4px 底条，活动分=番茄×2+提交+批改）；`.today` accent 描边、`.dl::after` 截止旗标（danger ⚑）、`.cal-due` 到期角标（link 色 10px 左上）；有番茄的格子为链接（开当天日志）。五问 `.q-list`（dl/dt/dd，dt 加粗 14px）。
 - **material 作业详情**：批注视图内嵌（header:false），右栏底部 `.material-note`（虚线上边框 + 一句话笔记 + 提交）。
 - **wikilink**：md.js 渲染为 `#/doc?name=` 活链接（支持 [[名|别名]]），样式沿用 `.wikilink` 虚线下划线。
+
+## 日历交互与三箱一行（v2.2.1 追加）
+
+- 月历每天都是 `button.cal-cell`（padding:0、inherit 字体、hover dashed outline）；点选态 `.sel`（accent 实底 + #1D2B53 深字）；月历下 `.cal-detail` 虚线框当日详情条（13px，活动/到期/截止 + ghost 小按钮「打开当天日志」「去复习页」），默认选中今天。
+- `.grid-3`：三列栅格（三箱一行），窄屏塌单列。

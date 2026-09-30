@@ -62,7 +62,8 @@ function deadlineText(dl, iso) {
 // 活动分 → 热度档（1-3）：番茄权重 ×2（25 分钟一个，比一次提交重）
 const heatLv = (score) => (score >= 5 ? 3 : score >= 3 ? 2 : score >= 1 ? 1 : 0);
 
-function calGrid(d) {
+// 月历：每一天都是按钮——点选高亮 + 当日详情条（repaint 重画），不再只有番茄日能点
+function calGrid(d, selIso, repaint) {
   const cal = d.calendar || { days: {}, due_ahead: {} };
   const meta = (d.plan && d.plan.meta) || {};
   const now = new Date();
@@ -77,29 +78,48 @@ function calGrid(d) {
     const a = cal.days[iso] || {};
     const h = heatLv((a.pomo || 0) * 2 + (a.answered || 0) + (a.graded || 0));
     const dueN = cal.due_ahead[iso] || 0;
-    const isToday = iso === todayIso;
-    const isDl = meta.deadline === iso;
     const bits = [];
     if (a.pomo) bits.push(a.pomo + ' 番茄');
     if (a.answered) bits.push(a.answered + ' 次提交');
     if (a.graded) bits.push(a.graded + ' 次批改');
     if (dueN) bits.push(dueN + ' 张卡到期');
-    if (isDl) bits.push('截止日');
-    const attrs = {
-      class: 'cal-cell' + (h ? ' h' + h : '') + (isToday ? ' today' : '') + (isDl ? ' dl' : ''),
-      title: bits.join(' · ') || null,
-    };
+    if (meta.deadline === iso) bits.push('截止日');
     const kids = [String(day)];
     if (dueN) kids.push(el('span', { class: 'cal-due', text: String(dueN) }));
     if (h) kids.push(el('span', { class: 'cal-heat' }));
-    // 有番茄的日子必有学习日志：格子可点开当天日志
-    cells.push(a.pomo
-      ? el('a', { ...attrs, href: '#/doc?path=' + enc('学习日志/' + iso + '.md') }, kids)
-      : el('span', attrs, kids));
+    cells.push(el('button', {
+      type: 'button',
+      class: 'cal-cell' + (h ? ' h' + h : '') + (iso === todayIso ? ' today' : '')
+        + (meta.deadline === iso ? ' dl' : '') + (iso === selIso ? ' sel' : ''),
+      title: bits.join(' · ') || '没有学习记录',
+      onclick: () => repaint(iso),
+    }, kids));
   }
   return el('div', { class: 'cal-grid' },
     ['一', '二', '三', '四', '五', '六', '日']
       .map((w) => el('span', { class: 'cal-head', text: w })).concat(cells));
+}
+
+// 当日详情条：点选的日期 → 活动/到期/截止 + 动作入口
+function dayDetail(d, iso) {
+  const cal = d.calendar || { days: {}, due_ahead: {} };
+  const meta = (d.plan && d.plan.meta) || {};
+  const a = cal.days[iso] || {};
+  const dueN = cal.due_ahead[iso] || 0;
+  const md = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const label = md ? (Number(md[2]) + ' 月 ' + Number(md[3]) + ' 日') : iso;
+  const bits = [];
+  if (a.pomo) bits.push(a.pomo + ' 番茄');
+  if (a.answered) bits.push(a.answered + ' 次提交');
+  if (a.graded) bits.push(a.graded + ' 次批改');
+  if (dueN) bits.push(dueN + ' 张卡到期');
+  if (meta.deadline === iso) bits.push('⚑ 计划截止日');
+  const kids = [el('strong', { text: label + '：' }),
+    bits.length ? bits.join(' · ') : '这天没有学习记录'];
+  if (a.pomo) kids.push(el('a', { class: 'px-btn ghost',
+    href: '#/doc?path=' + enc('学习日志/' + iso + '.md') }, ['打开当天日志']));
+  if (dueN) kids.push(el('a', { class: 'px-btn ghost', href: '#/review' }, ['去复习页']));
+  return el('div', { class: 'cal-detail' }, kids);
 }
 
 function calCard(d, inbox) {
@@ -152,7 +172,16 @@ function calCard(d, inbox) {
         + (pc && pc.eta_date ? ' · 按当前节奏预计 ' + pc.eta_date + ' 完成' : ''),
     }),
   ]);
-  return card('计划与日历', 'flag', [el('div', { class: 'cal-wrap' }, [calGrid(d), qs])]);
+  // 月历 + 当日详情在左栏；点选日期 → 重画这两块（五问不动）
+  const wrap = el('div', { class: 'cal-wrap' });
+  const leftCol = el('div');
+  wrap.append(leftCol, el('div', {}, [qs]));
+  const paint = (selIso) => {
+    leftCol.innerHTML = '';
+    leftCol.append(calGrid(d, selIso, paint), dayDetail(d, selIso));
+  };
+  paint(todayIso);
+  return card('计划与日历', 'flag', [wrap]);
 }
 
 // plan_check 滞后警示横条：lag_days > 0 才显示
@@ -234,7 +263,7 @@ export async function render(outlet) {
   outlet.append(calCard(d, inbox));
   const grid = el('div', { class: 'grid-2' }, [dueCard(d.due || []), xpCard(d.xp)]);
   outlet.append(grid);
-  const grid2 = el('div', { class: 'grid-2' });
+  const grid2 = el('div', { class: 'grid-3' }); // 三箱一行
   for (const c of await boxCards()) grid2.append(c);
   outlet.append(grid2);
 }
