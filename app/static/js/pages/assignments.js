@@ -2,6 +2,7 @@
 import { get, post } from '../api.js';
 import { el, badge, empty, icon, toast } from '../ui.js';
 import { mdToHtml } from '../md.js';
+import { view as recallView } from './recall.js';
 
 const DIRS = ['待答题', '已答待批', '已批改'];
 const EMPTY_TEXT = {
@@ -9,7 +10,7 @@ const EMPTY_TEXT = {
   已答待批: '没有等着批改的作业——去 zcode 说「批改作业」，让它看看你的作答。',
   已批改: '还没有收获——批改完的作业会躺进这一箱。',
 };
-const TYPE_KIND = { quiz: 'accent', drill: 'warn', material: 'ok' };
+const TYPE_KIND = { quiz: 'accent', drill: 'warn', material: 'ok', recall: 'danger' };
 const enc = encodeURIComponent;
 
 const typeBadge = (t) => badge(t || 'quiz', TYPE_KIND[t] || '');
@@ -38,9 +39,11 @@ export async function render(outlet, params) {
     return;
   }
   for (const it of items) {
-    list.append(el('a', {
-      class: 'px-card', href: '#/assignment?dir=' + enc(dir) + '&file=' + enc(it.file),
-    }, [
+    // recall 包在待答题时直达白纸视图，其余进详情页
+    const href = it.type === 'recall' && dir === DIRS[0]
+      ? '#/recall?dir=' + enc(dir) + '&file=' + enc(it.file)
+      : '#/assignment?dir=' + enc(dir) + '&file=' + enc(it.file);
+    list.append(el('a', { class: 'px-card', href }, [
       el('p', {}, [el('strong', { text: it.title || it.file }), ' ', typeBadge(it.type)]),
       el('p', {}, (it.topics || []).map((t) => el('span', { class: 'px-tag', text: t }))),
       el('p', {}, [el('small', { text: it.date || it.mtime })]),
@@ -52,14 +55,16 @@ export async function render(outlet, params) {
 export async function renderDetail(outlet, params) {
   const dir = params.get('dir') || DIRS[0];
   const file = params.get('file') || '';
-  outlet.append(el('p', {}, [el('a', { href: '#/assignments?dir=' + enc(dir) }, ['← 返回列表'])]));
   let a;
   try {
     a = await get('/api/assignment?dir=' + enc(dir) + '&file=' + enc(file));
   } catch (e) {
+    outlet.append(el('p', {}, [el('a', { href: '#/assignments?dir=' + enc(dir) }, ['← 返回列表'])]));
     outlet.append(empty('打不开这个作业：' + e.message));
     return;
   }
+  if (a.can_answer && a.type === 'recall') return recallView(outlet, a); // 白纸默写有自己的视图
+  outlet.append(el('p', {}, [el('a', { href: '#/assignments?dir=' + enc(dir) }, ['← 返回列表'])]));
   // 头部：标题 + 类型徽章 + topics + Obsidian 按钮（无 url 就不渲染）
   outlet.append(el('h1', { class: 'page-title' }, [a.title || file]));
   outlet.append(el('div', {

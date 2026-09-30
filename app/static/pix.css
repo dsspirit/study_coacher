@@ -365,3 +365,28 @@ mark.px-hl { background: var(--highlight-bg); color: var(--highlight-ink); outli
 @keyframes ann-flash { 0%, 100% { background: var(--bg); } 50% { background: var(--accent); } }
 .flash { animation: ann-flash 0.32s steps(1, end) 3; } /* accent 硬切闪烁 3 次 ≈ 1s */
 .px-fab { position: absolute; z-index: 60; padding: 4px 10px; font-size: 14px; } /* 浮动批注钮 */
+
+/* ===== recall 白纸默写（v2.1 追加）===== */
+.recall-paper {
+  display: block; width: 100%; min-height: 320px;
+  padding: 14px 16px;
+  font-family: var(--font-ui); /* 白纸是长文书写区：可读字体（排版铁律，不用像素/等宽） */
+  font-size: 17px; line-height: 1.9;
+  color: var(--ink); background: var(--card);
+  border: 2px solid var(--border);
+  resize: vertical;
+}
+.recall-paper::placeholder { color: var(--muted); }
+.recall-paper:focus { border-color: var(--accent); outline: 2px solid var(--accent); outline-offset: 2px; }
+.recall-topic { font-size: 18px; margin-bottom: 12px; } /* 主题行：比正文大一号即可 */
+.recall-hint {
+  margin: 10px 0 0; padding: 8px 12px;
+  color: var(--muted); font-size: 14px;
+  border: 2px dashed var(--accent);
+}
+.recall-locked {
+  margin: 0 0 12px; padding: 10px 12px;
+  background: var(--bg); border: 2px dashed var(--border);
+}
+.recall-locked-text { white-space: pre-wrap; overflow-wrap: break-word; font-size: 15px; line-height: 1.7; }
+.recall-locked p { margin: 6px 0 0; }

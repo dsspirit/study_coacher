@@ -8,6 +8,7 @@ import * as home from './pages/home.js';
 import * as assignments from './pages/assignments.js';
 import * as plan from './pages/plan.js';
 import * as review from './pages/review.js';
+import * as recall from './pages/recall.js';
 import * as reader from './pages/reader.js';
 import * as pomodoro from './pages/pomodoro.js';
 
@@ -37,9 +38,9 @@ function initTheme() {
 // ---------- header ----------
 const NAV = [['/', '首页', 'home'], ['/assignments', '作业', 'book'],
   ['/plan', '计划', 'flag'], ['/review', '复习', 'timer']];
-// 路由 → 导航高亮归属（作业详情页归到「作业」）
+// 路由 → 导航高亮归属（作业详情页归到「作业」，白纸默写归到「复习」）
 const NAV_OF = { '/': '/', '/assignments': '/assignments', '/assignment': '/assignments',
-  '/plan': '/plan', '/review': '/review' };
+  '/plan': '/plan', '/review': '/review', '/recall': '/review' };
 
 // XP 迷你徽章：首页拿到 dashboard 后广播 'lz-xp' 事件，这里只负责刷新
 const xpMini = el('span', { class: 'px-badge accent', id: 'xp-mini', style: { display: 'none' } });
@@ -94,6 +95,7 @@ router.register('/assignments', assignments.render);
 router.register('/assignment', assignments.renderDetail);
 router.register('/plan', plan.render);
 router.register('/review', review.render);
+router.register('/recall', recall.render);
 router.register('/read', reader.render);
 router.notFound((outlet) => {
   outlet.append(el('div', { class: 'px-card' }, [

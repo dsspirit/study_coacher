@@ -60,6 +60,20 @@ class LegacyFormatTest(unittest.TestCase):
         self.assertIn("指令微调", intro)
         self.assertIn("损失掩码", zonefs.unquote_block(ans))
 
+    def test_recall_package_question_split(self):
+        """recall 白纸默写包：type=recall 也按 ### Q<n> 切卡，主题即题面。"""
+        meta, body = zonefs.parse_frontmatter(_read(FIXTURES / "作业包_recall.md"))
+        self.assertEqual(meta["type"], "recall")
+        task, _ans, _grade = zonefs.split_sections(body)
+        intro, qs = zonefs.parse_questions(task)
+        self.assertEqual([q[0] for q in qs], ["1", "2"])
+        self.assertEqual([q[1] for q in qs], ["默写", "默写"])
+        self.assertEqual([q[2] for q in qs], ["后训练流水线", "SFT 与 DPO 的信号差别"])
+        self.assertIn("合上所有材料", intro)
+        # 白纸作答（含自动 appended 的用时行）经 quote_block 组装后可原样还原
+        composed = zonefs.quote_block("流水线是……\n\n（用时 2:23）")
+        self.assertEqual(zonefs.unquote_block(composed), "流水线是……\n\n（用时 2:23）")
+
     def test_set_status_idempotent(self):
         text = _read(FIXTURES / "作业包_quiz.md")
         once = zonefs.set_status(text, "graded")

@@ -37,7 +37,7 @@ import zonefs   # noqa: E402
 import gamify   # noqa: E402
 from scheduler import plan_check  # noqa: E402
 
-VERSION = "2.0"
+VERSION = "2.1"
 
 # 浏览器不请自来要的图标（终端日志里曾经的三个 404）：别名到 static/icons/
 FAVICON_ALIASES = {
@@ -290,7 +290,7 @@ class Handler(BaseHTTPRequestHandler):
                "status": meta.get("status", ""), "date": meta.get("date", ""),
                "task_md": task, "answer_md": ans, "grade_md": grade,
                "can_answer": d == zonefs.INBOX, "obsidian_url": obsidian_url(p)}
-        if ttype in ("quiz", "drill"):  # quiz/drill 逐题切块；material 原样给 task_md 全文
+        if ttype in ("quiz", "drill", "recall"):  # 逐题切块；material 原样给 task_md 全文
             _intro, blocks = zonefs.parse_questions(task)
             out["questions"] = [{"num": n, "type": t, "md": rest} for n, t, rest in blocks]
         self._ok(**out)

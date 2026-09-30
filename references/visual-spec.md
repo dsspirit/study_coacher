@@ -44,3 +44,11 @@
 ## 组件清单（类名契约，JS 侧只依赖这些名字）
 
 `.px-btn`（.danger 变体红底）· `.px-card` · `.px-progress`（data-value 驱动格子）· `.px-badge`（.ok/.warn 语义色）· `.px-tab`（激活 = 底部 3px accent）· `.px-input/.px-textarea`（2px 边框无圆角，focus 换 accent 边）· `mark.px-hl`（高亮黄底 + 2px 虚线同色边）· `.px-toast`（右下角滑入卡片）· `.px-empty`（空态引导）· `header.px-topbar`（导航条）。
+
+## recall 白纸默写（v2.1 追加）
+
+- `.recall-paper`：白纸书写区（textarea）。**用 `--font-ui`**（长文书写区，同铁律：承载书写内容的元素不用像素/等宽字体），17px / 行高 1.9，min-height 320px，2px 直角边框，focus 换 accent 边。
+- `.recall-topic`：主题行（md-body 内），18px。
+- `.recall-hint`：挣扎提示条（10 秒没动笔出现，一动笔消失）：muted 字 + 2px accent 虚线边。
+- `.recall-locked` / `.recall-locked-text`：已交卷卡只读回显：`--bg` 底 + 2px border 虚线，正文 pre-wrap 15px。
+- 复用：卡块用 `.q-block`/`.q-head`，徽章/按钮/计时全部走既有 `.px-badge`/`.px-btn`。
