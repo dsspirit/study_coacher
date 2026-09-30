@@ -37,7 +37,7 @@ import zonefs   # noqa: E402
 import gamify   # noqa: E402
 from scheduler import plan_check  # noqa: E402
 
-VERSION = "2.1"
+VERSION = "2.2"
 
 # 浏览器不请自来要的图标（终端日志里曾经的三个 404）：别名到 static/icons/
 FAVICON_ALIASES = {
@@ -348,8 +348,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def api_read(self, qs):
         rel = qs.get("path", [""])[0]
-        if not rel:
-            return self._fail(400, "缺少 path 参数")
+        if not rel:  # 无 path：按 wikilink 名称（文件名）在 vault/zone 内解析
+            name = qs.get("name", [""])[0]
+            if not name:
+                return self._fail(400, "缺少 path 或 name 参数")
+            root = VAULT if VAULT else ZONE
+            rel = zonefs.resolve_note(root, name)
+            if rel is None:
+                return self._fail(404, "没找到叫「%s」的笔记" % name)
         # 允许根：vault 优先，其次 zone 三目录与 90_模板；末尾兜底 zone 根自身——
         # 无 vault 时 /api/library 列出的就是 zone 相对路径，read 必须能原样打开
         roots = ([VAULT] if VAULT else []) \
@@ -427,12 +433,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def api_dashboard(self, qs):
         today = date.today()
-        out = {"due": [], "plan": None, "tip": None, "xp": None, "plan_check": None}
+        out = {"due": [], "plan": None, "tip": None, "xp": None, "plan_check": None,
+               "calendar": {"days": {}, "due_ahead": {}}}
+        queue = _data_file("复习队列.md")
         try:  # 单个子块失败不影响整体：catch 后保持 null/空
-            q = _data_file("复习队列.md")
-            if q:
+            if queue:
                 out["due"] = [{"topic": t, "link": l, "next": n}
-                              for t, l, n in zonefs.due_cards(q)]
+                              for t, l, n in zonefs.due_cards(queue)]
+        except Exception:
+            pass
+        try:
+            if queue:
+                out["calendar"] = zonefs.calendar_activity(ZONE, queue)
         except Exception:
             pass
         try:

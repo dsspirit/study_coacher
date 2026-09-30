@@ -390,3 +390,49 @@ mark.px-hl { background: var(--highlight-bg); color: var(--highlight-ink); outli
 }
 .recall-locked-text { white-space: pre-wrap; overflow-wrap: break-word; font-size: 15px; line-height: 1.7; }
 .recall-locked p { margin: 6px 0 0; }
+
+/* ===== reader 易读性（v2.1.2 追加）===== */
+#read-left { max-width: 40em; margin: 0 auto; } /* 长文行宽 ≈ 40 汉字，宽屏不拉满 */
+.ann-quote { cursor: pointer; } /* 点引用反向定位原文 */
+.ann-quote:hover { color: var(--ink); border-left-color: var(--accent); }
+.outline { margin: 0 0 12px; }
+.outline .px-btn { padding: 4px 10px; font-size: 14px; }
+.outline-list { margin-top: 6px; padding: 4px 0; border: 2px dashed var(--border); max-height: 40vh; overflow: auto; }
+.outline-item {
+  display: block; width: 100%; padding: 4px 10px;
+  font-family: inherit; font-size: 14px; line-height: 1.6; text-align: left;
+  color: var(--ink); background: transparent; border: none; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.outline-item:hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.outline-item.lv3 { padding-left: 26px; }
+.outline-item.lv4 { padding-left: 42px; }
+
+/* ===== 首页计划与日历（v2.2 追加）===== */
+.cal-wrap { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; }
+@media (max-width: 899px) { .cal-wrap { grid-template-columns: 1fr; } }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-head { text-align: center; font-size: 12px; color: var(--muted); padding: 2px 0; }
+.cal-cell {
+  position: relative; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: var(--ink); text-decoration: none;
+  background: var(--card); border: 2px solid var(--border);
+}
+.cal-cell.blank { visibility: hidden; }
+a.cal-cell:hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
+.cal-cell.today { outline: 2px solid var(--accent); outline-offset: -2px; font-weight: bold; }
+.cal-cell.dl::after { content: '⚑'; position: absolute; top: 0; right: 2px; font-size: 10px; color: var(--danger); }
+.cal-due { position: absolute; top: 0; left: 3px; font-size: 10px; color: var(--link); }
+.cal-heat { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; }
+.cal-cell.h1 .cal-heat { background: #83769C; }
+.cal-cell.h2 .cal-heat { background: var(--accent); }
+.cal-cell.h3 .cal-heat { background: var(--ok); }
+.q-list { margin: 0; font-size: 14px; line-height: 1.7; }
+.q-list dt { font-weight: bold; margin-top: 10px; color: var(--ink); }
+.q-list dt:first-child { margin-top: 0; }
+.q-list dd { margin: 2px 0 0; color: var(--ink); overflow-wrap: break-word; }
+.q-list dd .px-progress { margin: 4px 0; }
+.material-note { margin-top: 12px; padding-top: 10px; border-top: 2px dashed var(--border); }
+.material-note label { display: block; margin-bottom: 6px; font-size: 14px; }
+.px-progress { flex: 1 1 auto; min-width: 60px; } /* 进度条进 flex 容器（如五问 dd）时撑开，不再缩成 4px 竖条 */

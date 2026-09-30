@@ -12,11 +12,18 @@ function esc(s) {
 }
 
 // 行内标记（输入已整体转义，产出可信 HTML 片段）
+// wikilink 是活链接：[[笔记名]] / [[路径/笔记|显示名]] → #/doc?name=（批注视图打开，
+// 服务端按名解析路径）；解析不到时 doc 页会给「没找到」提示，不炸页面。
 function inline(s) {
   return s
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\[\[([^\]]+)\]\]/g, '<span class="wikilink">$1</span>')
+    .replace(/\[\[([^\]]+)\]\]/g, (_m, inner) => {
+      const [target, label] = inner.split('|');
+      const t = (target || '').trim();
+      return '<a class="wikilink" href="#/doc?name=' + encodeURIComponent(t) + '">'
+        + ((label || target) || '').trim() + '</a>';
+    })
     .replace(/\[([^\]]+)\]\(([^)\s]*)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 

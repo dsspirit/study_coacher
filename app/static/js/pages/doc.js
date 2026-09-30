@@ -1,6 +1,10 @@
-// reader.js — 双栏阅读器：无 path = 资料库浏览（面包屑 + 目录/文件）；
-// 有 path = 阅读模式（左材料 + 右批注，选区浮钮批注，纯文本定位高亮）。
-// API 契约见 app/server.py：/api/library、/api/read、/api/annotations（GET/POST/PUT/DELETE）。
+// doc.js — 批注视图（基础能力）：任何 markdown 打开都是「左内容 + 右批注」。
+// 不再有独立的「资料库浏览」——原文与自由浏览归 Obsidian，工作台只放精炼过的
+// 学习材料（作业包 / 学习日志 / 计划 / 笔记 wikilink）。
+// 入口：#/doc?path=<相对路径>（日历点开的日志、最近在读、material 作业页内嵌）
+// 或 #/doc?name=<wikilink 名>（材料正文里的 [[笔记]] 链接，服务端按名解析）。
+// mountDoc 是可复用组件：作业 material 详情页用 header:false + footer（一句话笔记）。
+// API 契约见 app/server.py：/api/read（path|name）、/api/annotations（GET/POST/PUT/DELETE）。
 import { get, post } from '../api.js';
 import { el, badge, empty, icon, toast } from '../ui.js';
 import { mdToHtml } from '../md.js';
@@ -9,9 +13,10 @@ const enc = encodeURIComponent;
 const ASSIGN_DIRS = ['待答题', '已答待批', '已批改'];
 const QUOTE_MAX = 200; // 与 zonefs.QUOTE_MAX 一致：超长引文前端先截断再发
 const MIN_SELECT = 4;  // 选区至少这么长才浮出批注按钮
+const RECENT_KEY = 'lz-recent'; // 最近在读（首页「最近在读」与本文空态页共用）
 
 // ---------- PUT / DELETE 薄封装 ----------
-// api.js 目前只导出 get/post（公共模块不在本任务改动范围），这里按同一约定补齐：
+// api.js 目前只导出 get/post，这里按同一约定补齐：
 // 失败 {ok:false,error} + 4xx/5xx → 抛中文 Error，行为与 get/post 完全一致。
 async function send(method, url, body) {
   const opts = { method };
@@ -30,98 +35,84 @@ async function send(method, url, body) {
 const put = (url, body = {}) => send('PUT', url, body);
 const del = (url) => send('DELETE', url);
 
-// 路由入口：path 为空 → 库模式；否则阅读模式
+// 路由入口：path/name → 批注视图；都没有 → 引导页（自由浏览去 Obsidian）
 export async function render(outlet, params) {
   const path = params.get('path') || '';
-  if (path) await renderReader(outlet, path);
-  else await renderLibrary(outlet, params);
-}
-
-// ---------- A. 库模式：目录浏览器 ----------
-async function renderLibrary(outlet, params) {
-  const rel = params.get('path') || '';
-  outlet.append(el('h1', { class: 'page-title' }, [icon('book'), '资料库']));
-  const card = el('section', { class: 'px-card' });
-  outlet.append(card);
-
-  // 面包屑：根 = 📚 库（回 #/read），每级目录名可点回上级
-  const crumbs = el('div', { class: 'px-card-title' }, [el('a', { href: '#/read' }, ['📚 库'])]);
-  const segs = rel.split('/').filter(Boolean);
-  segs.forEach((seg, i) => {
-    crumbs.append(' / ');
-    crumbs.append(i === segs.length - 1
-      ? el('span', { text: seg })
-      : el('a', { href: '#/read?path=' + enc(segs.slice(0, i + 1).join('/')) }, [seg]));
-  });
-  card.append(crumbs);
-
-  let data;
+  const name = params.get('name') || '';
+  if (!path && !name) { renderHome(outlet); return; }
   try {
-    data = await get('/api/library?path=' + enc(rel));
+    await mountDoc(outlet, { path, name, header: true });
   } catch (e) {
-    card.append(empty('打不开这个目录：' + e.message));
-    return;
-  }
-  if (data.truncated) card.append(el('div', { class: 'px-notice', text: '只显示前 200 项' }));
-  if (!(data.dirs || []).length && !(data.files || []).length) {
-    card.append(empty('这个目录空空的。'));
-    return;
-  }
-  const up = segs.join('/'); // 当前目录（拼子项链接用）
-  for (const d of data.dirs || []) {
-    card.append(el('a', {
-      class: 'reader-item', href: '#/read?path=' + enc(up ? up + '/' + d : d),
-    }, ['📁 ', d + '/']));
-  }
-  for (const f of data.files || []) {
-    card.append(el('a', { class: 'reader-item', href: '#/read?path=' + enc(f.path) },
-      ['📄 ', el('strong', { text: f.title })]));
-  }
-}
-
-// ---------- B. 阅读模式：左材料 + 右批注 ----------
-async function renderReader(outlet, path) {
-  let mat, anns;
-  try {
-    [mat, anns] = await Promise.all([
-      get('/api/read?path=' + enc(path)),
-      get('/api/annotations?material=' + enc(path)),
-    ]);
-  } catch (e) {
-    outlet.append(el('h1', { class: 'page-title' }, [icon('book'), '阅读器']));
+    outlet.append(el('h1', { class: 'page-title' }, [icon('read'), '批注阅读']));
     outlet.append(empty('打不开这份材料：' + e.message));
-    outlet.append(el('p', {}, [el('a', { class: 'px-btn ghost', href: '#/read' }, ['返回资料库'])]));
+    outlet.append(el('p', {}, [el('a', { class: 'px-btn ghost', href: '#/' }, ['回首页'])]));
+  }
+}
+
+// 引导页：工作台的定位说明 + 最近在读（快速续读）
+function renderHome(outlet) {
+  outlet.append(el('h1', { class: 'page-title' }, [icon('read'), '批注阅读']));
+  outlet.append(el('div', {
+    class: 'px-notice',
+    text: '这里打开具体材料：作业包、学习日志、材料里的笔记链接。'
+      + '工作台只放精炼过的学习材料——原文（含 PDF 论文）都在 Obsidian 里，自由浏览请去那里。',
+  }));
+  const list = recentList();
+  if (!list.length) {
+    outlet.append(empty('还没有打开过的材料——从「作业」箱或首页开始。'));
     return;
   }
+  for (const r of list) {
+    outlet.append(el('a', { class: 'px-card', href: '#/doc?path=' + enc(r.path) }, [
+      el('p', {}, [el('strong', { text: r.title || r.path })]),
+      el('p', {}, [el('small', { text: r.path })]),
+    ]));
+  }
+}
 
-  // 左栏：标题行（标题 + Obsidian 按钮（无 url 不渲染）+ 返回库）+ 正文
+// ---------- 批注视图组件 ----------
+// 先读材料（path 或 name；返回的 source 是权威相对路径），批注一律按 source 落侧车。
+// opts.header = 左栏是否带标题行（#/doc 用 true；作业 material 详情页自带标题用 false）
+// opts.footer = 追加到右栏批注列表下方的节点（作业页放「一句话笔记」表单）
+export async function mountDoc(container, opts = {}) {
+  const path = opts.path || '';
+  const name = opts.name || '';
+  const mat = await get('/api/read?' + (path ? 'path=' + enc(path) : 'name=' + enc(name)));
+  const anns = await get('/api/annotations?material=' + enc(mat.source));
+
+  // 左栏：（header 时）标题行 + 大纲条 + 正文
   const leftBody = el('div', { class: 'md-body', id: 'read-left', html: mdToHtml(mat.md) });
-  const leftCard = el('section', { class: 'px-card' }, [
-    el('div', { class: 'px-card-title' }, [
+  const leftKids = [];
+  if (opts.header) {
+    leftKids.push(el('div', { class: 'px-card-title' }, [
       el('span', { text: mat.title }),
       mat.obsidian_url ? el('button', {
         class: 'px-btn ghost', onclick: () => window.open(mat.obsidian_url, '_blank'),
       }, ['在 Obsidian 打开']) : null,
-      el('a', { class: 'px-btn ghost', href: '#/read' }, ['返回库']),
-    ]),
-    leftBody,
-  ]);
+      el('a', { class: 'px-btn ghost', href: '#/' }, ['回首页']),
+    ]));
+  }
+  leftKids.push(buildOutline(leftBody), leftBody);
+  const leftCard = el('section', { class: 'px-card' }, leftKids);
 
-  // 右栏：批注数徽章 + 首次提示 + （作业包才有）作答/批改入口，下面是条目列表
+  // 右栏：批注数徽章 + 首次提示 + （#/doc 打开作业包时）作答入口，下面是条目列表
   const countBadge = badge('0', 'accent');
   const hint = el('small', { class: 'ann-hint', text: '选中左侧文字即可批注' });
   const listEl = el('div', { id: 'ann-scroll' });
-  const rightCard = el('section', { class: 'px-card' }, [
-    el('div', { class: 'px-card-title' },
-      [el('span', { text: '批注' }), countBadge, hint, assignmentLink(path)]),
-    listEl,
-  ]);
-  outlet.append(el('div', { class: 'grid-2 reader' }, [leftCard, rightCard]));
+  const rightKids = [el('div', { class: 'px-card-title' },
+    [el('span', { text: '批注' }), countBadge, hint,
+      opts.header ? assignmentLink(mat.source) : null])];
+  rightKids.push(listEl);
+  if (opts.footer) rightKids.push(opts.footer); // 提交表单放列表下方，不被长列表顶走
+  const rightCard = el('section', { class: 'px-card' }, rightKids);
+  container.append(el('div', { class: 'grid-2 reader' }, [leftCard, rightCard]));
 
-  page = { path, leftEl: leftBody, listEl, countBadge, hint, fab: null };
+  page = { path: mat.source, leftEl: leftBody, listEl, countBadge, hint, fab: null };
+  pushRecent(mat.source, mat.title); // 首页「最近在读」的数据源
   renderAnns(anns);
   anchorAll(anns.entries); // 初始渲染：把已有批注逐条定位高亮
   wireSelection(leftBody);
+  return { listEl, countBadge };
 }
 
 // 作业包（三目录下的材料）→ 右栏顶部的「去作答 / 去看批改」快捷入口；普通笔记返回 null
@@ -131,6 +122,45 @@ function assignmentLink(path) {
   return el('a', { class: 'px-btn ghost',
     href: '#/assignment?dir=' + enc(m[1]) + '&file=' + enc(m[2]) },
   [m[1] === ASSIGN_DIRS[0] ? '去作答' : '去看批改']);
+}
+
+// ---------- 最近在读（localStorage，最多 5 条；首页最近在读卡消费） ----------
+export function recentList() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((r) => r && r.path) : [];
+  } catch {
+    return [];
+  }
+}
+
+function pushRecent(path, title) {
+  try {
+    const next = [{ path, title: title || path, ts: Date.now() },
+      ...recentList().filter((r) => r.path !== path)].slice(0, 5);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+  } catch { /* 存不了就算了，不影响阅读 */ }
+}
+
+// ---------- 大纲条：从已渲染的左栏 DOM 收集标题（md.js：#→h2、##→h3、更深 h4） ----------
+// 少于 3 个标题不值得目录；点击滚动定位，不做 URL 锚点（换材料即失效，无意义）。
+function buildOutline(leftBody) {
+  const heads = [...leftBody.querySelectorAll('h2, h3, h4')];
+  if (heads.length < 3) return document.createComment(' outline: skip ');
+  const list = el('div', { class: 'outline-list', style: { display: 'none' } },
+    heads.map((h) => el('button', {
+      class: 'outline-item lv' + h.tagName.toLowerCase(),
+      text: h.textContent,
+      onclick: () => {
+        list.style.display = 'none';
+        h.scrollIntoView({ block: 'start' });
+      },
+    })));
+  const btn = el('button', { class: 'px-btn ghost' }, ['☰ 大纲 ' + heads.length]);
+  btn.addEventListener('click', () => {
+    list.style.display = list.style.display === 'none' ? '' : 'none';
+  });
+  return el('div', { class: 'outline' }, [btn, list]);
 }
 
 // ---------- 批注列表 ----------
@@ -151,14 +181,26 @@ function renderAnns(anns) {
     listEl.append(empty('还没有批注。'));
     return;
   }
-  for (const e of entries) listEl.append(annEntry(e, page.path));
+  for (const e of entries) listEl.append(annEntry(e, page.path, page.leftEl));
 }
 
-// 单条批注卡：引用 + note（只读 ⇄ 编辑切换）+ 编辑/删除 + 时间戳
-// 请求一律用渲染时捕获的 material 路径（matPath），路由切走后旧节点上的请求也不会打错材料
-function annEntry(e, matPath) {
+// 单条批注卡：引用 + note（只读 ⇄ 编辑切换）+ 定位/编辑/删除 + 时间戳
+// 请求与 DOM 定位一律用渲染时捕获的 material 路径与左栏（matPath/leftEl），
+// 路由切走后旧节点上的请求也不会打错材料
+function annEntry(e, matPath, leftEl) {
   const card = el('div', { class: 'ann-entry', dataset: { id: e.id } });
-  card.append(el('div', { class: 'ann-quote', text: '> ' + e.quote }));
+
+  // 反向定位：点「定位原文」按钮或引用本身 → 左栏高亮滚进视野 + 闪烁
+  const goOrigin = () => {
+    const m = leftEl && leftEl.querySelector('mark.px-hl[data-id="' + cssId(e.id) + '"]');
+    if (!m) { toast('原文已变，未能定位', 'warn'); return; }
+    m.scrollIntoView({ block: 'center' });
+    m.classList.remove('flash');
+    void m.offsetWidth; // 强制重排以重启动画
+    m.classList.add('flash');
+    setTimeout(() => m.classList.remove('flash'), 1000);
+  };
+  card.append(el('div', { class: 'ann-quote', text: '> ' + e.quote, onclick: goOrigin }));
 
   const noteWrap = el('div');
   const showNote = () => { // 只读态：无内容时给一行灰字占位（不用 .ann-fail，那是定位失败的标记）
@@ -195,6 +237,7 @@ function annEntry(e, matPath) {
   card.append(noteWrap);
 
   card.append(el('div', { class: 'px-row' }, [
+    el('button', { class: 'px-btn ghost', onclick: goOrigin }, ['↩ 定位']),
     el('button', { class: 'px-btn ghost', onclick: editNote }, ['编辑']),
     el('button', {
       class: 'px-btn ghost danger',
@@ -218,7 +261,7 @@ function annEntry(e, matPath) {
   return card;
 }
 
-// ---------- D. 高亮锚定：纯文本定位 + Range 包 mark ----------
+// ---------- 高亮锚定：纯文本定位 + Range 包 mark ----------
 const cssId = (id) => (window.CSS && CSS.escape) ? CSS.escape(id) : id;
 
 // TreeWalker 收集容器内所有文本节点，拼全文字符串并记录每节点 [start, end)
@@ -298,8 +341,8 @@ function jumpTo(annId) {
   setTimeout(() => card.classList.remove('flash'), 1000);
 }
 
-// ---------- C. 选区 → 浮动「✏ 批注」按钮 ----------
-// 当前阅读页上下文；document 级监听只绑一次，靠 leftEl.isConnected 判断页面是否还活着，
+// ---------- 选区 → 浮动「✏ 批注」按钮 ----------
+// 当前批注页上下文；document 级监听只绑一次，靠 leftEl.isConnected 判断页面是否还活着，
 // 路由切走后旧监听自动变空操作，不会重复绑监听。
 let page = null;
 

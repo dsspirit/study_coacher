@@ -280,6 +280,63 @@ class GamifyTest(unittest.TestCase):
                                      "streak": 0, "graded": 0, "pomos_today": 0, "pomos_total": 0})
 
 
+class CalendarNoteTest(unittest.TestCase):
+    """calendar_activity（首页月历）与 resolve_note（wikilink 解析）。"""
+
+    def setUp(self):
+        self.zone = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.zone, ignore_errors=True)
+
+    def _write(self, rel, text):
+        p = Path(self.zone) / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        return p
+
+    def test_calendar_activity_counts(self):
+        import os
+        from datetime import date, timedelta
+        today = date.today()
+        d1 = today.isoformat()
+        d2 = (today - timedelta(days=1)).isoformat()
+        old = (today - timedelta(days=100)).isoformat()  # 超出回看窗口，不该出现
+        self._write("学习日志/%s.md" % d1,
+                    "# 日\n\n## 番茄钟\n\n- 09:00–09:25 · 25 min · 读\n- 10:00–10:25 · 25 min · 写\n")
+        self._write("学习日志/%s.md" % old, "# 旧\n\n## 番茄钟\n\n- 09:00–09:25 · 25 min · x\n")
+        # 已答待批：mtime=今天（刚写入）；已批改：把 mtime 改到昨天
+        ans = self._write("已答待批/a.md", "---\nstatus: answered\n---\n")
+        gra = self._write("已批改/b.md", "---\nstatus: graded\n---\n")
+        y2 = (today - timedelta(days=1)).toordinal() - date(1970, 1, 1).toordinal()
+        y2 *= 86400
+        os.utime(gra, (y2, y2))
+        q = self._write("复习队列.md",
+                        "| 主题 | 链接 | 间隔 | 难易 | 下次复习 | 连对 | 状态 |\n"
+                        "|---|---|---|---|---|---|---|\n"
+                        "| 卡A | [[]] | 1 | 2.5 | %s | 0 | 进行中 |\n"
+                        "| 卡B | [[]] | 1 | 2.5 | %s | 0 | 进行中 |\n"
+                        "| 卡C | [[]] | 1 | 2.5 | %s | 0 | 毕业 |\n"
+                        % (today.isoformat(), (today + timedelta(days=3)).isoformat(),
+                           (today + timedelta(days=5)).isoformat()))
+        out = zonefs.calendar_activity(self.zone, q)
+        self.assertEqual(out["days"][d1]["pomo"], 2)
+        self.assertEqual(out["days"][d1]["answered"], 1)
+        self.assertEqual(out["days"][d2]["graded"], 1)
+        self.assertNotIn(old, out["days"])
+        self.assertEqual(out["due_ahead"][today.isoformat()], 1)
+        self.assertEqual(out["due_ahead"][(today + timedelta(days=3)).isoformat()], 1)
+        self.assertNotIn((today + timedelta(days=5)).isoformat(), out["due_ahead"])  # 已毕业
+
+    def test_resolve_note(self):
+        self._write("07_文献笔记/文献_DPO.md", "# DPO\n")
+        self._write("notes/deep/文献_DPO.md", "# 同名深层\n")
+        self._write("错题本/后训练范式.md", "# 范式\n")
+        self.assertEqual(zonefs.resolve_note(self.zone, "07_文献笔记/文献_DPO"), "07_文献笔记/文献_DPO.md")
+        # 同名按路径最短优先
+        self.assertEqual(zonefs.resolve_note(self.zone, "文献_DPO"), "07_文献笔记/文献_DPO.md")
+        self.assertEqual(zonefs.resolve_note(self.zone, "后训练范式"), "错题本/后训练范式.md")
+        self.assertIsNone(zonefs.resolve_note(self.zone, "不存在"))
+
+
 class PlanCheckTest(unittest.TestCase):
     def test_arithmetic_lag_four_days(self):
         r = scheduler.plan_check(FIXTURES / "学习计划.md", hours_per_block=1.5, today=date(2026, 3, 1))

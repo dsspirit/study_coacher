@@ -1,8 +1,9 @@
-// assignments.js — 作业三箱列表 + 作业包详情（答题 / 材料笔记 / 作答回显与批改）。
+// assignments.js — 作业三箱列表 + 作业包详情（答题 / 材料批注精读 / 作答回显与批改）。
 import { get, post } from '../api.js';
 import { el, badge, empty, icon, toast } from '../ui.js';
 import { mdToHtml } from '../md.js';
 import { view as recallView } from './recall.js';
+import { mountDoc } from './doc.js';
 
 const DIRS = ['待答题', '已答待批', '已批改'];
 const EMPTY_TEXT = {
@@ -115,30 +116,30 @@ function answerForm(outlet, a) {
   }, ['交卷'])]));
 }
 
-// material 且可作答：材料全文 + 去阅读器 + 大笔记框
+// material 且可作答：批注视图一体化（左材料划线批注，右批注列表 + 一句话笔记 + 提交）。
+// 精读与作答在同一页完成，不再跳「阅读器」；原文（PDF 论文等）在 Obsidian，
+// 材料里的 [[wikilink]] 点开即进那篇笔记的批注视图。
 function materialForm(outlet, a) {
-  outlet.append(el('div', { class: 'md-body', html: mdToHtml(a.task_md) }));
-  outlet.append(el('p', {}, [
-    el('a', { class: 'px-btn ghost', href: '#/read?path=' + enc(a.dir + '/' + a.file) },
-      ['去阅读器精读']),
-  ]));
-  outlet.append(el('p', {}, [el('label', { text: '一句话笔记（合上材料再写）' })]));
-  const note = el('textarea', { class: 'answer-box', rows: '8', placeholder: '写三句话收获……' });
-  outlet.append(note);
-  outlet.append(el('p', {}, [el('button', {
-    class: 'px-btn',
-    onclick: async (ev) => {
-      ev.target.disabled = true;
-      try {
-        await post('/api/submit', { dir: a.dir, file: a.file, note: note.value });
-        toast('已提交，移入「已答待批」', 'ok');
-        location.hash = '#/assignments?dir=' + enc('已答待批');
-      } catch (e) {
-        toast(e.message, 'danger');
-        ev.target.disabled = false;
-      }
-    },
-  }, ['提交笔记'])]));
+  const note = el('textarea', { class: 'answer-box', rows: '6', placeholder: '写三句话收获……' });
+  const footer = el('div', { class: 'material-note' }, [
+    el('label', { text: '一句话笔记（合上材料再写）' }),
+    note,
+    el('p', {}, [el('button', {
+      class: 'px-btn',
+      onclick: async (ev) => {
+        ev.target.disabled = true;
+        try {
+          await post('/api/submit', { dir: a.dir, file: a.file, note: note.value });
+          toast('已提交，移入「已答待批」——回 zcode 说「批改」', 'ok');
+          location.hash = '#/assignments?dir=' + enc('已答待批');
+        } catch (e) {
+          toast(e.message, 'danger');
+          ev.target.disabled = false;
+        }
+      },
+    }, ['读完，提交笔记'])]),
+  ]);
+  mountDoc(outlet, { path: a.dir + '/' + a.file, header: false, footer });
 }
 
 // 已答/已批：作答回显（去行首引用符后按 md 渲染）+ 批改卡（accent 边框）

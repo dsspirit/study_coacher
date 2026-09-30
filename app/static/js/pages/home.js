@@ -1,10 +1,13 @@
-// home.js — 仪表盘：贴士卡 / 到期复习 / 计划面板（含滞后警示）/ XP 卡 / 三箱快捷入口。
+// home.js — 仪表盘：贴士 / 计划与日历（月历热度 + 五问）/ 到期复习 / XP / 三箱入口。
+// 日历五问：①计划是什么 ②学过什么 ③要学什么 ④下一步干什么 ⑤计划啥时候完成。
 import { get } from '../api.js';
 import { el, badge, empty, icon, progress, toast } from '../ui.js';
+import { recentList } from './doc.js';
 
 const DIRS = [['待答题', 'pencil', '去答题'], ['已答待批', 'list', '等批改'],
   ['已批改', 'star', '已收获']];
 const enc = encodeURIComponent;
+const pad = (n) => String(n).padStart(2, '0');
 
 // 通用卡片骨架：.px-card > .px-card-title + 内容
 function card(title, ic, kids) {
@@ -39,28 +42,11 @@ function tipCard(tip) {
   return card('今日贴士', 'star', [body, btn]);
 }
 
-// ---------- ② 到期复习卡列表：空则庆祝，链接去复习页 ----------
-function dueCard(due) {
-  const kids = [];
-  if (!due.length) {
-    kids.push(empty('全部清空！今天没有到期的复习卡，这就是坚持的样子。'));
-  } else {
-    kids.push(el('table', { class: 'px-table' }, [
-      el('thead', {}, [el('tr', {}, [el('th', { text: '主题' }), el('th', { text: '下次复习' })])]),
-      el('tbody', {}, due.map((d) => el('tr', {}, [
-        el('td', {}, [el('a', { href: '#/review' }, [d.topic])]),
-        el('td', {}, [el('small', { text: d.next })]),
-      ]))),
-    ]));
-  }
-  kids.push(el('p', {}, [el('a', { class: 'px-btn ghost', href: '#/review' }, ['去复习页'])]));
-  return card('到期复习', 'book', kids);
-}
-
-// ---------- ③ 计划面板：goal / 当前阶段 / 进度条 / 截止倒计时 ----------
-function daysUntil(iso) { // 本地时区算天数差
+// ---------- ② 计划与日历大卡：左月历（活动热度/截止旗/到期角标）+ 右五问 ----------
+function daysUntil(iso) { // 本地时区算天数差；非 YYYY-MM-DD（如占位符）返回 null 而非 NaN
   if (!iso) return null;
   const [y, m, d] = iso.split('-').map(Number);
+  if ([y, m, d].some(Number.isNaN)) return null;
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((new Date(y, m - 1, d) - today) / 86400000);
@@ -73,16 +59,100 @@ function deadlineText(dl, iso) {
   return '距截止还有 ' + dl + ' 天';
 }
 
-function planCard(d) {
+// 活动分 → 热度档（1-3）：番茄权重 ×2（25 分钟一个，比一次提交重）
+const heatLv = (score) => (score >= 5 ? 3 : score >= 3 ? 2 : score >= 1 ? 1 : 0);
+
+function calGrid(d) {
+  const cal = d.calendar || { days: {}, due_ahead: {} };
+  const meta = (d.plan && d.plan.meta) || {};
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const todayIso = y + '-' + pad(m + 1) + '-' + pad(now.getDate());
+  const lead = (new Date(y, m, 1).getDay() + 6) % 7; // 周一为第一列
+  const dim = new Date(y, m + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push(el('span', { class: 'cal-cell blank' }));
+  for (let day = 1; day <= dim; day++) {
+    const iso = y + '-' + pad(m + 1) + '-' + pad(day);
+    const a = cal.days[iso] || {};
+    const h = heatLv((a.pomo || 0) * 2 + (a.answered || 0) + (a.graded || 0));
+    const dueN = cal.due_ahead[iso] || 0;
+    const isToday = iso === todayIso;
+    const isDl = meta.deadline === iso;
+    const bits = [];
+    if (a.pomo) bits.push(a.pomo + ' 番茄');
+    if (a.answered) bits.push(a.answered + ' 次提交');
+    if (a.graded) bits.push(a.graded + ' 次批改');
+    if (dueN) bits.push(dueN + ' 张卡到期');
+    if (isDl) bits.push('截止日');
+    const attrs = {
+      class: 'cal-cell' + (h ? ' h' + h : '') + (isToday ? ' today' : '') + (isDl ? ' dl' : ''),
+      title: bits.join(' · ') || null,
+    };
+    const kids = [String(day)];
+    if (dueN) kids.push(el('span', { class: 'cal-due', text: String(dueN) }));
+    if (h) kids.push(el('span', { class: 'cal-heat' }));
+    // 有番茄的日子必有学习日志：格子可点开当天日志
+    cells.push(a.pomo
+      ? el('a', { ...attrs, href: '#/doc?path=' + enc('学习日志/' + iso + '.md') }, kids)
+      : el('span', attrs, kids));
+  }
+  return el('div', { class: 'cal-grid' },
+    ['一', '二', '三', '四', '五', '六', '日']
+      .map((w) => el('span', { class: 'cal-head', text: w })).concat(cells));
+}
+
+function calCard(d, inbox) {
+  const cal = d.calendar || { days: {}, due_ahead: {} };
   const plan = d.plan;
   const meta = (plan && plan.meta) || {};
   const pc = d.plan_check;
-  const kids = [el('p', {}, [el('strong', { text: meta.goal || '（未设目标）' })])];
-  if (meta.current_stage) kids.push(el('p', {}, ['当前阶段：', badge(meta.current_stage, 'accent')]));
-  if (plan) kids.push(progress(plan.pct, plan.done + '/' + plan.total + ' · ' + plan.pct + '%'));
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const monthKey = y + '-' + pad(m + 1);
+  const todayIso = monthKey + '-' + pad(now.getDate());
+
+  // ② 本月学过：days 按月前缀汇总
+  let pomo = 0, answered = 0, graded = 0;
+  for (const [iso, a] of Object.entries(cal.days)) {
+    if (!iso.startsWith(monthKey)) continue;
+    pomo += a.pomo || 0; answered += a.answered || 0; graded += a.graded || 0;
+  }
+  // ③ 未来 7 天到期数
+  let due7 = 0;
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(y, m, now.getDate() + i);
+    due7 += cal.due_ahead[dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate())] || 0;
+  }
+  const pend = inbox || [];
+  const firstMaterial = pend.find((it) => it.type === 'material');
+  const due = d.due || [];
   const dl = pc && pc.days_left != null ? pc.days_left : daysUntil(meta.deadline);
-  kids.push(el('p', {}, [el('small', { text: deadlineText(dl, meta.deadline) })]));
-  return card('学习计划', 'flag', kids);
+
+  const qs = el('dl', { class: 'q-list' }, [
+    el('dt', { text: '① 计划' }),
+    el('dd', {}, [
+      el('strong', { text: meta.goal || '（未设目标）' }),
+    ]),
+    plan ? el('dd', {}, [progress(plan.pct, plan.done + '/' + plan.total + ' · ' + plan.pct + '%')]) : null,
+    el('dt', { text: '② 学过（本月）' }),
+    el('dd', { text: pomo + ' 个番茄 · ' + answered + ' 次提交 · ' + graded + ' 次批改（点日历格子看当天日志）' }),
+    el('dt', { text: '③ 要学' }),
+    el('dd', { text: '待答题 ' + pend.length + ' 份'
+      + (firstMaterial ? '（在读：' + (firstMaterial.title || firstMaterial.file) + '）' : '')
+      + (due7 ? '；未来 7 天 ' + due7 + ' 张卡到期' : '') }),
+    el('dt', { text: '④ 下一步' }),
+    due.length
+      ? el('dd', {}, [el('a', { href: '#/review' },
+          ['先去默写 ' + due.length + ' 张到期卡（白纸包在复习页领）'])])
+      : el('dd', { text: (meta.current_item || '—') + '　→　下一个：' + (meta.next_item || '—') }),
+    el('dt', { text: '⑤ 完成' }),
+    el('dd', {
+      text: deadlineText(dl, meta.deadline)
+        + (pc && pc.eta_date ? ' · 按当前节奏预计 ' + pc.eta_date + ' 完成' : ''),
+    }),
+  ]);
+  return card('计划与日历', 'flag', [el('div', { class: 'cal-wrap' }, [calGrid(d), qs])]);
 }
 
 // plan_check 滞后警示横条：lag_days > 0 才显示
@@ -91,6 +161,24 @@ function lagNotice(pc) {
   return el('div', { class: 'px-notice danger', text: '按当前节奏滞后 ' + pc.lag_days + ' 天：'
     + '剩余 ' + pc.blocks_left + ' 块 ≈ ' + pc.est_hours + ' h，预计 ' + (pc.eta_date || '?')
     + ' 完成（截止 ' + (pc.deadline || '未设') + '）。考虑砍范围或加时间。' });
+}
+
+// ---------- ③ 到期复习卡列表：空则庆祝，链接去复习页 ----------
+function dueCard(due) {
+  const kids = [];
+  if (!due.length) {
+    kids.push(empty('全部清空！今天没有到期的复习卡，这就是坚持的样子。'));
+  } else {
+    kids.push(el('table', { class: 'px-table' }, [
+      el('thead', {}, [el('tr', {}, [el('th', { text: '主题' }), el('th', { text: '下次复习' })])]),
+      el('tbody', {}, due.map((row) => el('tr', {}, [
+        el('td', {}, [el('a', { href: '#/review' }, [row.topic])]),
+        el('td', {}, [el('small', { text: row.next })]),
+      ]))),
+    ]));
+  }
+  kids.push(el('p', {}, [el('a', { class: 'px-btn ghost', href: '#/review' }, ['去复习页'])]));
+  return card('到期复习', 'book', kids);
 }
 
 // ---------- ④ XP 卡：大数字 + 称号 + 连续天数 ----------
@@ -105,7 +193,16 @@ function xpCard(x) {
   ]);
 }
 
-// ---------- ⑤ 三箱快捷入口：并行拉三个目录计数 ----------
+// ---------- ⑤ 最近在读：doc.js 写入的 localStorage，最多 5 条 ----------
+function recentCard() {
+  const list = recentList();
+  if (!list.length) return null;
+  return card('最近在读', 'read', list.map((r) => el('a', {
+    class: 'reader-item', href: '#/doc?path=' + enc(r.path),
+  }, ['📄 ', el('strong', { text: r.title || r.path })])));
+}
+
+// ---------- ⑥ 三箱快捷入口：并行拉三个目录计数 ----------
 async function boxCards() {
   const counts = await Promise.all(DIRS.map(([dir]) =>
     get('/api/assignments?dir=' + enc(dir)).then((r) => r.items.length).catch(() => null)));
@@ -128,10 +225,14 @@ export async function render(outlet) {
   }
   if (d.xp) window.dispatchEvent(new CustomEvent('lz-xp', { detail: d.xp })); // 刷新 header 徽章
   if (d.tip) outlet.append(tipCard(d.tip));
-  outlet.append(dueCard(d.due || []));
+  const recent = recentCard();
+  if (recent) outlet.append(recent);
   const lag = lagNotice(d.plan_check);
   if (lag) outlet.append(lag);
-  const grid = el('div', { class: 'grid-2' }, [planCard(d), xpCard(d.xp)]);
+  let inbox = []; // 五问③要学什么：待答题清单
+  try { inbox = (await get('/api/assignments?dir=' + enc('待答题'))).items || []; } catch { /* 拿不到就只显示计数缺失 */ }
+  outlet.append(calCard(d, inbox));
+  const grid = el('div', { class: 'grid-2' }, [dueCard(d.due || []), xpCard(d.xp)]);
   outlet.append(grid);
   const grid2 = el('div', { class: 'grid-2' });
   for (const c of await boxCards()) grid2.append(c);

@@ -57,3 +57,17 @@
 
 - 渲染：md.js 检测正文含 `$` 时懒加载本地 KaTeX（`static/vendor/katex/`），对 body 跑 auto-render：`$$…$$` 展示（居中）、`$…$` 行内；`ignoredClasses: ['mmd']` 保护 mermaid 源码；`throwOnError: false`（语法错渲染红色错误段不炸页）；加载失败原文保留（天然降级）。
 - 主题：KaTeX 文字颜色继承环境（`--ink`），深浅主题自动可读，无需为公式写 token；公式字体是 KaTeX 自带（Computer Modern 系），属数学专业排版，不违反「正文可读字体」铁律。
+
+## reader 易读性（v2.1.2 追加）
+
+- `#read-left` 限行宽 `max-width: 40em` 居中（长文 ≈40 汉字/行，宽屏不拉满）。
+- `.outline` / `.outline-list` / `.outline-item.lv2|lv3|lv4`：阅读页大纲条（ghost 按钮「☰ 大纲 N」+ 虚线框可折叠列表，14px，hover dashed outline，缩进 10/26/42px）。
+- `.ann-quote` 可点（cursor pointer，hover 变 ink 字 + accent 左边条）→ 反向定位左栏高亮。
+- 新图标 `read`（打开的书 8×8）：「阅读」导航项 + 首页最近在读卡。
+
+## 计划与日历 / 批注视图（v2.2 追加）
+
+- **批注视图（doc.js）取代独立阅读器**：导航无「阅读」项；#/doc?path|name 打开任意 md（左内容右批注），#/read 为兼容别名；资料库浏览已删（自由浏览归 Obsidian）。
+- **首页计划与日历**：`.cal-wrap`（7:5 双栏，窄屏单列）；`.cal-grid` 7 列月历，`.cal-cell` 40px 直角格；热度条 `.cal-heat`（.h1 #83769C / .h2 accent / .h3 ok，4px 底条，活动分=番茄×2+提交+批改）；`.today` accent 描边、`.dl::after` 截止旗标（danger ⚑）、`.cal-due` 到期角标（link 色 10px 左上）；有番茄的格子为链接（开当天日志）。五问 `.q-list`（dl/dt/dd，dt 加粗 14px）。
+- **material 作业详情**：批注视图内嵌（header:false），右栏底部 `.material-note`（虚线上边框 + 一句话笔记 + 提交）。
+- **wikilink**：md.js 渲染为 `#/doc?name=` 活链接（支持 [[名|别名]]），样式沿用 `.wikilink` 虚线下划线。

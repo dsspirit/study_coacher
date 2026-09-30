@@ -99,7 +99,12 @@ def quote_block(text):
 def due_cards(queue_path):
     """读复习队列表格，返回今天（含逾期）到期的卡 [(主题, 链接, 下次复习)]，按计划日排序。"""
     today = date.today().isoformat()
-    cards = []
+    return [(t, l, n) for t, l, n in _queue_rows(queue_path) if n <= today]
+
+
+def _queue_rows(queue_path):
+    """读复习队列表格的进行中行 [(主题, 链接, 下次复习)]，不做日期过滤。"""
+    rows = []
     for line in Path(queue_path).read_text(encoding="utf-8").splitlines():
         s = line.strip()
         if not s.startswith("|"):
@@ -107,10 +112,85 @@ def due_cards(queue_path):
         cells = [c.strip() for c in s.strip("|").split("|")]
         if len(cells) != 7 or cells[0] == "主题" or set(cells[0]) <= set("-: "):
             continue
-        topic, link, nxt, status = cells[0], cells[1], cells[4], cells[6]
-        if status == "进行中" and nxt <= today:
-            cards.append((topic, link, nxt))
-    return sorted(cards, key=lambda c: c[2])
+        if cells[6] == "进行中":
+            rows.append((cells[0], cells[1], cells[4]))
+    return sorted(rows, key=lambda r: r[2])
+
+
+def calendar_activity(zone, queue_path=None, ahead_days=30, back_days=62):
+    """首页月历数据：过去活动 + 未来到期分布。
+
+    days：{date: {pomo, answered, graded}}——番茄钟数来自 学习日志/<date>.md 的
+    番茄钟节行数；已答待批/已批改按文件 mtime 所在日计数（answered=提交时刻，
+    graded=批改写回时刻），只保留最近 back_days 天。
+    due_ahead：{date: count}——从今天起 ahead_days 天内到期的进行中卡数（含今天）。
+    """
+    zone = Path(zone)
+    today = date.today()
+    cutoff = today.toordinal() - back_days
+    days = {}
+
+    def slot(d):
+        if d.toordinal() < cutoff:
+            return None
+        key = d.isoformat()
+        return days.setdefault(key, {"pomo": 0, "answered": 0, "graded": 0})
+
+    log_dir = zone / LOG_DIR
+    if log_dir.is_dir():
+        for p in log_dir.glob("*.md"):
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", p.stem):
+                continue
+            text = p.read_text(encoding="utf-8")
+            n = len(re.findall(r"(?m)^- \d{2}:\d{2}–\d{2}:\d{2} · \d+ min", text))
+            if n:
+                s = slot(date.fromisoformat(p.stem))
+                if s:
+                    s["pomo"] += n
+    for dir_name, key in ((ANSWERED, "answered"), (GRADED, "graded")):
+        d = zone / dir_name
+        if not d.is_dir():
+            continue
+        for p in d.glob("*.md"):
+            if p.name.startswith("_"):
+                continue
+            s = slot(date.fromtimestamp(p.stat().st_mtime))
+            if s:
+                s[key] += 1
+
+    due_ahead = {}
+    if queue_path:
+        limit = (today.toordinal() + ahead_days)
+        for _t, _l, nxt in _queue_rows(queue_path):
+            try:
+                d = date.fromisoformat(nxt)
+            except ValueError:
+                continue
+            if today.toordinal() <= d.toordinal() <= limit:
+                due_ahead[nxt] = due_ahead.get(nxt, 0) + 1
+    return {"days": days, "due_ahead": due_ahead}
+
+
+def resolve_note(root, name):
+    """wikilink 解析：name（可含相对路径/显示别名前的文件名）→ root 下的相对 md 路径。
+
+    规则：含 '/' 先按路径直达；否则全库按文件名（stem）精确匹配，多个命中取
+    路径最短的（浅层优先，与 Obsidian 最短路径优先一致）。找不到返回 None。
+    """
+    root = Path(root)
+    name = name.strip()
+    if not name:
+        return None
+    if "/" in name:
+        cand = root / (name + ".md")
+        return name + ".md" if cand.is_file() else None
+    hits = []
+    for p in root.rglob("*.md"):
+        if any(seg in EXCLUDE_DIRS or seg.startswith(".") for seg in p.relative_to(root).parts[:-1]):
+            continue
+        if p.stem == name:
+            hits.append(p.relative_to(root).as_posix())
+    return min(hits, key=lambda s: (s.count("/"), s)) if hits else None
 
 
 def parse_plan(plan_path):
