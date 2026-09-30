@@ -503,3 +503,13 @@ button.cal-cell:hover { outline: 2px dashed var(--accent); outline-offset: -2px;
 .cal-detail .cal-row { margin: 3px 0; font-size: 14px; line-height: 1.7; }
 .cal-detail .cal-row a { color: var(--link); }
 .cal-loading { color: var(--muted); font-size: 13px; }
+
+/* 已批改时间线（v2.2.6 追加）：按天分组、像素竖线 + 方块节点 */
+.tl-day { position: relative; margin: 0 0 16px 6px; padding-left: 20px; border-left: 4px solid var(--border); }
+.tl-day::before { /* 每天的方块节点骑在竖线上 */
+  content: ''; position: absolute; left: -12px; top: 4px;
+  width: 8px; height: 8px; background: var(--accent); border: 2px solid var(--border);
+}
+.tl-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 15px; font-weight: bold; }
+.tl-item { display: block; margin: 0 0 8px; padding: 8px 12px; text-decoration: none; color: inherit; }
+.tl-item:hover { outline: 2px dashed var(--accent); outline-offset: -2px; }

@@ -492,13 +492,15 @@ def list_assignments(zone, dir_name):
             meta = {}
         topics = meta.get("topics", [])
         topics = topics if isinstance(topics, list) else [topics]
+        stamp = p.stat().st_mtime
         out.append({"file": p.name,
                     "title": meta.get("title", ""),
                     "type": meta.get("type", ""),
                     "topics": topics,
                     "status": meta.get("status", ""),
                     "date": meta.get("date", ""),
-                    "mtime": date.fromtimestamp(p.stat().st_mtime).isoformat()})
+                    "mtime": date.fromtimestamp(stamp).isoformat(),
+                    "mtime_iso": datetime.fromtimestamp(stamp).strftime("%Y-%m-%dT%H:%M")})
     return out
 
 

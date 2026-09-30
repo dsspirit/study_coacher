@@ -85,3 +85,9 @@
 - `prefers-reduced-motion: reduce` 时全部动画关闭。
 - 可读性修订（同日）：`.cal-wrap` 断点 899→1279px（中窄窗口单列，根治五问右栏被挤成窄竖条）；`.q-list` 14→15px/1.8；`.cal-detail` 13→14px。
 - 月历切月与当日流水（v2.2.4）：`.cal-nav`（◀ 标题 ▶ 今天，今天按钮当月禁用）；点选日期 → `.cal-panel` 异步拉 `/api/day` 渲染 `.cal-detail` 流水（🍅 番茄逐条/交：/批： 作业链接+徽章/到期+去复习/打开当天日志/截止 ⚑/无记录）；切月默认选今天或 1 号；数据层 calendar_activity 改全量、新 day_activity。
+
+## 已批改时间线（v2.2.6 追加）
+
+- 「已批改」箱 = 学习足迹：按天分组（新→旧）+ 组内按批改时刻（新→旧，`mtime_iso` 分钟精度，list_assignments 新增该字段）。
+- `.tl-day`：左侧 4px 竖线（border-left）+ 每天一个 8px accent 方块节点（::before 骑线）；`.tl-head` 日期标签（今天/昨天/X 月 X 日 · 周几）+ 份数徽章；`.tl-item` 精简条目（HH:MM + 标题 + 类型徽章，hover dashed）。
+- 「已答待批」条目小字改为「提交 HH:MM（已等 X 小时/分钟）」；「待答题」保持（先发先做，量小无需时间线）。

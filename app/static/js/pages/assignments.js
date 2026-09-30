@@ -39,15 +39,72 @@ export async function render(outlet, params) {
     list.append(empty(EMPTY_TEXT[dir]));
     return;
   }
+  if (dir === '已批改') return renderTimeline(list, dir, items); // 归宿：按天时间线
   for (const it of items) {
     // recall 包在待答题时直达白纸视图，其余进详情页
     const href = it.type === 'recall' && dir === DIRS[0]
       ? '#/recall?dir=' + enc(dir) + '&file=' + enc(it.file)
       : '#/assignment?dir=' + enc(dir) + '&file=' + enc(it.file);
+    const meta = dir === '已答待批' ? '提交 ' + waitText(it.mtime_iso) : (it.date || it.mtime);
     list.append(el('a', { class: 'px-card', href }, [
       el('p', {}, [el('strong', { text: it.title || it.file }), ' ', typeBadge(it.type)]),
       el('p', {}, (it.topics || []).map((t) => el('span', { class: 'px-tag', text: t }))),
-      el('p', {}, [el('small', { text: it.date || it.mtime })]),
+      el('p', {}, [el('small', { text: meta })]),
+    ]));
+  }
+}
+
+// 已答待批：提交时间 + 已等多久（提醒回来喊批改）
+function waitText(mtimeIso) {
+  if (!mtimeIso) return '';
+  const t = new Date(mtimeIso);
+  const mins = Math.max(0, Math.floor((Date.now() - t.getTime()) / 60000));
+  if (mins < 60) return mins + ' 分钟（已等 ' + mins + ' 分钟）';
+  const h = Math.floor(mins / 60);
+  return String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0')
+    + '（已等 ' + (h >= 24 ? Math.floor(h / 24) + ' 天' : h + ' 小时') + '）';
+}
+
+// ---------- 已批改时间线：按天分组（新→旧），组内按批改时刻（新→旧） ----------
+function dayLabel(iso) {
+  const now = new Date();
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const todayIso = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate());
+  const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const yesterdayIso = y.getFullYear() + '-' + pad2(y.getMonth() + 1) + '-' + pad2(y.getDate());
+  const [_, m, d] = iso.split('-').map(Number);
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][
+    new Date(iso.substring(0, 4), m - 1, d).getDay()];
+  const base = m + ' 月 ' + d + ' 日 · ' + wd;
+  if (iso === todayIso) return '今天 · ' + base;
+  if (iso === yesterdayIso) return '昨天 · ' + base;
+  return base;
+}
+
+function renderTimeline(list, dir, items) {
+  const sorted = items.slice()
+    .sort((a, b) => (b.mtime_iso || b.mtime || '').localeCompare(a.mtime_iso || a.mtime || ''));
+  const groups = new Map(); // 插入序 = 最新天在前
+  for (const it of sorted) {
+    const day = (it.mtime_iso || it.mtime || '').slice(0, 10);
+    if (!groups.has(day)) groups.set(day, []);
+    groups.get(day).push(it);
+  }
+  for (const [day, arr] of groups) {
+    list.append(el('div', { class: 'tl-day' }, [
+      el('div', { class: 'tl-head' },
+        [el('span', { text: dayLabel(day) }), badge(arr.length + ' 份', 'accent')]),
+      ...arr.map((it) => el('a', {
+        class: 'px-card tl-item',
+        href: '#/assignment?dir=' + enc(dir) + '&file=' + enc(it.file),
+      }, [
+        el('p', {}, [
+          el('small', { text: (it.mtime_iso || '').slice(11, 16) + '　' }),
+          el('strong', { text: it.title || it.file }),
+          ' ',
+          typeBadge(it.type),
+        ]),
+      ])),
     ]));
   }
 }
