@@ -45,11 +45,17 @@ def tip_of_day(tips, date_str):
     return tips[sum(ord(c) for c in date_str) % len(tips)]
 
 
-def tip_random(tips, domain=None):
-    """随机抽一条；给了 domain 先过滤，过滤后为空则回退全池；全池也空返回 None。"""
+def tip_random(tips, domain=None, exclude=None):
+    """随机抽一条；domain 先过滤（空则回退全池）；exclude 按贴士名排除当前条
+    （「再来一条」点了必须换——小领域池只有 2 条时会高频抽回原条，2026-09-30 学生反馈）；
+    排除后为空回退不排除；全池也空返回 None。"""
     pool = [t for t in tips if t.get("domain") == domain] if domain else list(tips)
     if not pool:
         pool = tips
+    if exclude and len(pool) > 1:
+        filtered = [t for t in pool if t.get("name") != exclude]
+        if filtered:
+            pool = filtered
     return random.choice(pool) if pool else None
 
 

@@ -258,6 +258,14 @@ class GamifyTest(unittest.TestCase):
                          tips[sum(ord(c) for c in "2026-09-29") % len(tips)])
         self.assertIsNone(gamify.tip_of_day([], "2026-09-29"))
 
+    def test_tip_random_exclude_current(self):
+        """再来一条：exclude 当前条后必换（小领域池抽回原条的 bug 回归）。"""
+        tips = [{"name": "a", "domain": "d"}, {"name": "b", "domain": "d"}]
+        for _ in range(20):
+            self.assertNotEqual(gamify.tip_random(tips, exclude="a")["name"], "a")
+        # 全池只剩当前条时回退原条（不返回 None）
+        self.assertEqual(gamify.tip_random(tips[:1], exclude="a")["name"], "a")
+
     def test_tip_random_filters_and_falls_back(self):
         tips = gamify.load_tips(FIXTURES / "贴士库.md")
         for _ in range(10):
@@ -321,10 +329,34 @@ class CalendarNoteTest(unittest.TestCase):
         self.assertEqual(out["days"][d1]["pomo"], 2)
         self.assertEqual(out["days"][d1]["answered"], 1)
         self.assertEqual(out["days"][d2]["graded"], 1)
-        self.assertNotIn(old, out["days"])
+        self.assertIn(old, out["days"])  # 默认全量历史：任意年月可切
         self.assertEqual(out["due_ahead"][today.isoformat()], 1)
         self.assertEqual(out["due_ahead"][(today + timedelta(days=3)).isoformat()], 1)
         self.assertNotIn((today + timedelta(days=5)).isoformat(), out["due_ahead"])  # 已毕业
+        # 传窗口参数时旧行为不变（back_days 截断）
+        win = zonefs.calendar_activity(self.zone, q, ahead_days=1, back_days=1)
+        self.assertNotIn(old, win["days"])
+        self.assertNotIn((today + timedelta(days=3)).isoformat(), win["due_ahead"])
+
+    def test_day_activity_detail(self):
+        from datetime import date, timedelta
+        today = date.today()
+        d1 = today.isoformat()
+        self._write("学习日志/%s.md" % d1,
+                    "# 日\n\n## 番茄钟\n\n- 09:00–09:25 · 25 min · 精读\n- 10:00–10:25 · 25 min · 变式题\n")
+        self._write("已答待批/a.md", "---\ntitle: A 包\ntype: material\n---\n")
+        self._write("复习队列.md",
+                    "| 主题 | 链接 | 间隔 | 难易 | 下次复习 | 连对 | 状态 |\n"
+                    "|---|---|---|---|---|---|---|\n"
+                    "| 卡A | [[]] | 1 | 2.5 | %s | 0 | 进行中 |\n" % d1)
+        out = zonefs.day_activity(self.zone, self.zone + "/复习队列.md", d1)
+        self.assertTrue(out["log"])
+        self.assertEqual([p["label"] for p in out["pomo"]], ["精读", "变式题"])
+        self.assertEqual(out["pomo"][0]["min"], 25)
+        self.assertEqual([(a["title"], a["type"], a["dir"]) for a in out["submitted"]],
+                         [("A 包", "material", "已答待批")])
+        self.assertEqual(out["due"], 1)
+        self.assertEqual(zonefs.day_activity(self.zone, None, "2025-01-01")["pomo"], [])
 
     def test_resolve_note(self):
         self._write("07_文献笔记/文献_DPO.md", "# DPO\n")

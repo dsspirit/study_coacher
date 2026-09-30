@@ -15,6 +15,62 @@ function card(title, ic, kids) {
     [el('div', { class: 'px-card-title' }, [icon(ic), title]), ...kids]);
 }
 
+// ---------- ⓪ 怎么用：人机配合一日循环（像素动画泳道 + 静态清晰文字） ----------
+// 动画只做高亮与跳格移动（steps 硬切，像素风）；说明文字全部静态可读（排版铁律）。
+function howtoCard() {
+  const collapsed = localStorage.getItem('lz-howto') === '1';
+  const coach = el('div', { class: 'howto-role ht-coach' }, [
+    icon('robot'),
+    el('div', {}, [
+      el('strong', { text: 'Agent 教练' }),
+      el('small', { text: '出题 · 发白纸包 · 红笔批改 · SM-2 判档' }),
+    ]),
+  ]);
+  const student = el('div', { class: 'howto-role ht-student' }, [
+    icon('person'),
+    el('div', {}, [
+      el('strong', { text: '你（工作台）' }),
+      el('small', { text: '白纸默写 · 答题 · 划线批注 · 交卷' }),
+    ]),
+  ]);
+  const st = (ic, label, cls) => el('div', { class: 'howto-station ' + (cls || '') },
+    [icon(ic), el('span', { text: label })]);
+  const track = el('div', { class: 'howto-track' }, [
+    st('robot', 'Agent'),
+    st('box', '待答题', 's1'),
+    st('pencil', '已答待批', 's2'),
+    st('star', '已批改', 's3'),
+    el('span', { class: 'howto-courier', title: '作业包在流转' }, [icon('book')]),
+  ]);
+  const steps = el('ol', { class: 'howto-steps' }, [
+    el('li', {}, ['晨间对 Agent 说「', el('strong', { text: '晨间默写' }),
+      '」→ 到期卡发成白纸包，你在工作台一次一张默写（自动计时）']),
+    el('li', {}, ['白天在工作台：答题 / 精读材料——', el('strong', { text: '选中文字写批注' }),
+      '，读完交一句话笔记'],
+    ),
+    el('li', {}, ['回 Agent 说「', el('strong', { text: '批改' }),
+      '」→ 红笔 + 判档 + 错题归档，新作业包又进待答题——循环']),
+  ]);
+  const foot = el('small', {
+    class: 'howto-foot',
+    text: '进度全在 vault 文件里：Obsidian 管原文（含 PDF 论文），工作台管消化——文件是唯一媒介。',
+  });
+  const body = el('div', { class: 'howto-body' + (collapsed ? ' hide' : '') },
+    [coach, track, student, steps, foot]);
+  const btn = el('button', {
+    class: 'px-btn ghost', style: { marginLeft: 'auto', padding: '4px 10px', fontSize: '14px' },
+    onclick: () => {
+      const hide = body.classList.toggle('hide');
+      localStorage.setItem('lz-howto', hide ? '1' : '0');
+      btn.textContent = hide ? '展开' : '收起';
+    },
+  }, [collapsed ? '展开' : '收起']);
+  return el('section', { class: 'px-card' }, [
+    el('div', { class: 'px-card-title' }, [icon('book'), '使用指南', btn]),
+    body,
+  ]);
+}
+
 // ---------- ① 贴士卡：原理名 + 一句话 + 怎么做 + 领域徽章，「再来一条」换内容 ----------
 function tipCard(tip) {
   const body = el('div');
@@ -30,8 +86,8 @@ function tipCard(tip) {
   paint(tip);
   const btn = el('button', {
     class: 'px-btn ghost',
-    onclick: async () => { // 沿当前领域随机换一条
-      const q = tip && tip.domain ? '?domain=' + enc(tip.domain) : '';
+    onclick: async () => { // 全库随机换一条并排除当前条（小领域池会抽回原条，点了像没换）
+      const q = tip && tip.name ? '?exclude=' + enc(tip.name) : '';
       try {
         const r = await get('/api/tips/random' + q);
         tip = r.tip;
@@ -62,15 +118,28 @@ function deadlineText(dl, iso) {
 // 活动分 → 热度档（1-3）：番茄权重 ×2（25 分钟一个，比一次提交重）
 const heatLv = (score) => (score >= 5 ? 3 : score >= 3 ? 2 : score >= 1 ? 1 : 0);
 
-// 月历：每一天都是按钮——点选高亮 + 当日详情条（repaint 重画），不再只有番茄日能点
-function calGrid(d, selIso, repaint) {
-  const cal = d.calendar || { days: {}, due_ahead: {} };
-  const meta = (d.plan && d.plan.meta) || {};
+// 月历盒子：任意年月渲染 + 切月导航；点选格子 → onPick(iso)，切月 → onNav()
+function monthBox(cal, meta, state, selIso, onPick, onNav, todayIso) {
+  const y = state.y, m = state.m;
   const now = new Date();
-  const y = now.getFullYear(), m = now.getMonth();
-  const todayIso = y + '-' + pad(m + 1) + '-' + pad(now.getDate());
-  const lead = (new Date(y, m, 1).getDay() + 6) % 7; // 周一为第一列
+  const isCur = y === now.getFullYear() && m === now.getMonth();
   const dim = new Date(y, m + 1, 0).getDate();
+  const lead = (new Date(y, m, 1).getDay() + 6) % 7; // 周一为第一列
+  const go = (dy, dm) => {
+    const d0 = new Date(y + dy, m + dm, 1);
+    state.y = d0.getFullYear();
+    state.m = d0.getMonth();
+    onNav();
+  };
+  const nav = el('div', { class: 'cal-nav' }, [
+    el('button', { class: 'px-btn ghost', type: 'button', onclick: () => go(0, -1) }, ['◀']),
+    el('strong', { text: y + ' 年 ' + (m + 1) + ' 月' }),
+    el('button', { class: 'px-btn ghost', type: 'button', onclick: () => go(0, 1) }, ['▶']),
+    el('button', {
+      class: 'px-btn ghost', type: 'button', disabled: isCur,
+      onclick: () => { state.y = now.getFullYear(); state.m = now.getMonth(); onNav(); },
+    }, ['今天']),
+  ]);
   const cells = [];
   for (let i = 0; i < lead; i++) cells.push(el('span', { class: 'cal-cell blank' }));
   for (let day = 1; day <= dim; day++) {
@@ -92,34 +161,54 @@ function calGrid(d, selIso, repaint) {
       class: 'cal-cell' + (h ? ' h' + h : '') + (iso === todayIso ? ' today' : '')
         + (meta.deadline === iso ? ' dl' : '') + (iso === selIso ? ' sel' : ''),
       title: bits.join(' · ') || '没有学习记录',
-      onclick: () => repaint(iso),
+      onclick: () => onPick(iso),
     }, kids));
   }
-  return el('div', { class: 'cal-grid' },
+  const grid = el('div', { class: 'cal-grid' },
     ['一', '二', '三', '四', '五', '六', '日']
       .map((w) => el('span', { class: 'cal-head', text: w })).concat(cells));
+  return el('div', {}, [nav, grid]);
 }
 
-// 当日详情条：点选的日期 → 活动/到期/截止 + 动作入口
-function dayDetail(d, iso) {
-  const cal = d.calendar || { days: {}, due_ahead: {} };
-  const meta = (d.plan && d.plan.meta) || {};
-  const a = cal.days[iso] || {};
-  const dueN = cal.due_ahead[iso] || 0;
+// 当日流水面板：点选日期 → /api/day 明细（番茄逐条/当天作业/到期/截止）
+async function drawDayPanel(panel, meta, iso) {
+  panel.innerHTML = '';
+  panel.append(el('small', { class: 'cal-loading', text: '加载当日明细…' }));
+  let day;
+  try {
+    day = await get('/api/day?date=' + iso);
+  } catch (e) {
+    panel.innerHTML = '';
+    panel.append(el('div', { class: 'cal-detail', text: '明细加载失败：' + e.message }));
+    return;
+  }
+  panel.innerHTML = '';
   const md = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const label = md ? (Number(md[2]) + ' 月 ' + Number(md[3]) + ' 日') : iso;
-  const bits = [];
-  if (a.pomo) bits.push(a.pomo + ' 番茄');
-  if (a.answered) bits.push(a.answered + ' 次提交');
-  if (a.graded) bits.push(a.graded + ' 次批改');
-  if (dueN) bits.push(dueN + ' 张卡到期');
-  if (meta.deadline === iso) bits.push('⚑ 计划截止日');
-  const kids = [el('strong', { text: label + '：' }),
-    bits.length ? bits.join(' · ') : '这天没有学习记录'];
-  if (a.pomo) kids.push(el('a', { class: 'px-btn ghost',
-    href: '#/doc?path=' + enc('学习日志/' + iso + '.md') }, ['打开当天日志']));
-  if (dueN) kids.push(el('a', { class: 'px-btn ghost', href: '#/review' }, ['去复习页']));
-  return el('div', { class: 'cal-detail' }, kids);
+  const wd = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][
+    new Date(Number(md[1]), Number(md[2]) - 1, Number(md[3])).getDay()];
+  const kids = [el('strong', { text: Number(md[2]) + ' 月 ' + Number(md[3]) + ' 日 · ' + wd })];
+  if (meta.deadline === iso) kids.push(el('div', { class: 'cal-row', text: '⚑ 计划截止日' }));
+  for (const p of day.pomo || []) {
+    kids.push(el('div', { class: 'cal-row',
+      text: '🍅 ' + p.start + '–' + p.end + ' · ' + p.min + ' min · ' + (p.label || '无标签') }));
+  }
+  for (const a of day.submitted || []) {
+    kids.push(el('div', { class: 'cal-row' }, ['交：',
+      el('a', { href: '#/assignment?dir=' + enc(a.dir) + '&file=' + enc(a.file) }, [a.title]),
+      ' ', badge(a.type || 'quiz')]));
+  }
+  for (const a of day.graded || []) {
+    kids.push(el('div', { class: 'cal-row' }, ['批：',
+      el('a', { href: '#/assignment?dir=' + enc(a.dir) + '&file=' + enc(a.file) }, [a.title]),
+      ' ', badge('已批改', 'ok')]));
+  }
+  if (day.due) kids.push(el('div', { class: 'cal-row' }, [day.due + ' 张卡到期　',
+    el('a', { href: '#/review' }, ['去复习页'])]));
+  if (day.log) kids.push(el('div', { class: 'cal-row' }, [
+    el('a', { class: 'px-btn ghost', href: '#/doc?path=' + enc('学习日志/' + iso + '.md') },
+      ['打开当天日志'])]));
+  if (kids.length === 1) kids.push(el('div', { class: 'cal-row', text: '这天没有学习记录' }));
+  panel.append(el('div', { class: 'cal-detail' }, kids));
 }
 
 function calCard(d, inbox) {
@@ -172,15 +261,28 @@ function calCard(d, inbox) {
         + (pc && pc.eta_date ? ' · 按当前节奏预计 ' + pc.eta_date + ' 完成' : ''),
     }),
   ]);
-  // 月历 + 当日详情在左栏；点选日期 → 重画这两块（五问不动）
+  // 月历（可切年月）+ 当日流水面板在左栏；五问固定「现在时」不随切月变
+  const state = { y: now.getFullYear(), m: now.getMonth() };
+  let selIso = todayIso;
   const wrap = el('div', { class: 'cal-wrap' });
   const leftCol = el('div');
+  const monthHolder = el('div');
+  const panel = el('div', { class: 'cal-panel' });
+  leftCol.append(monthHolder, panel);
   wrap.append(leftCol, el('div', {}, [qs]));
-  const paint = (selIso) => {
-    leftCol.innerHTML = '';
-    leftCol.append(calGrid(d, selIso, paint), dayDetail(d, selIso));
+  const drawMonth = () => {
+    monthHolder.innerHTML = '';
+    monthHolder.append(monthBox(cal, meta, state, selIso, onPick, onNav, todayIso));
   };
-  paint(todayIso);
+  const onPick = (iso) => { selIso = iso; drawMonth(); drawDayPanel(panel, meta, iso); };
+  const onNav = () => { // 切月后默认选：当月选今天，否则选 1 号
+    selIso = (state.y === now.getFullYear() && state.m === now.getMonth())
+      ? todayIso : state.y + '-' + pad(state.m + 1) + '-01';
+    drawMonth();
+    drawDayPanel(panel, meta, selIso);
+  };
+  drawMonth();
+  drawDayPanel(panel, meta, selIso);
   return card('计划与日历', 'flag', [wrap]);
 }
 
@@ -254,6 +356,7 @@ export async function render(outlet) {
   }
   if (d.xp) window.dispatchEvent(new CustomEvent('lz-xp', { detail: d.xp })); // 刷新 header 徽章
   const boxesP = boxCards(); // 三箱计数并行预取，不阻塞下面的卡片渲染
+  outlet.append(howtoCard()); // 怎么用（可折叠，新手引导）
   if (d.tip) outlet.append(tipCard(d.tip));
   const boxes = el('div', { class: 'grid-3' }); // 三箱一行：紧跟今日贴士
   outlet.append(boxes);

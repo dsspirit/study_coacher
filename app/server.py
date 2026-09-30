@@ -431,6 +431,13 @@ class Handler(BaseHTTPRequestHandler):
         parsed = _attach_plan_items(zonefs.parse_plan(p), md)
         self._ok(**parsed, md=md, obsidian_url=obsidian_url(p))
 
+    def api_day(self, qs):
+        d = qs.get("date", [""])[0]
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d):
+            return self._fail(400, "date 应是 YYYY-MM-DD")
+        q = _data_file("复习队列.md")
+        self._ok(**zonefs.day_activity(ZONE, q, d))
+
     def api_dashboard(self, qs):
         today = date.today()
         out = {"due": [], "plan": None, "tip": None, "xp": None, "plan_check": None,
@@ -473,7 +480,8 @@ class Handler(BaseHTTPRequestHandler):
         tips = gamify.load_tips(TIPS_PATH)
         if not tips:
             return self._fail(503, "贴士库未安装")
-        self._ok(tip=gamify.tip_random(tips, qs.get("domain", [None])[0] or None))
+        self._ok(tip=gamify.tip_random(tips, qs.get("domain", [None])[0] or None,
+                                        qs.get("exclude", [None])[0] or None))
 
     def api_pomodoro(self, qs):
         data = self._read_json()
@@ -505,6 +513,7 @@ ROUTES = {
     ("GET", "/api/annotations"): Handler.api_annotations_get,
     ("GET", "/api/plan"): Handler.api_plan,
     ("GET", "/api/dashboard"): Handler.api_dashboard,
+    ("GET", "/api/day"): Handler.api_day,
     ("GET", "/api/tips/random"): Handler.api_tips_random,
     ("POST", "/api/submit"): Handler.api_submit,
     ("POST", "/api/annotations"): Handler.api_annotations_post,

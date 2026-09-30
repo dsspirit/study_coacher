@@ -410,7 +410,7 @@ mark.px-hl { background: var(--highlight-bg); color: var(--highlight-ink); outli
 
 /* ===== 首页计划与日历（v2.2 追加）===== */
 .cal-wrap { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; }
-@media (max-width: 899px) { .cal-wrap { grid-template-columns: 1fr; } }
+@media (max-width: 1279px) { .cal-wrap { grid-template-columns: 1fr; } } /* 五问被挤窄的根源：断点提到 1279，中窄窗口单列 */
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-head { text-align: center; font-size: 12px; color: var(--muted); padding: 2px 0; }
 .cal-cell {
@@ -428,7 +428,7 @@ a.cal-cell:hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .cal-cell.h1 .cal-heat { background: #83769C; }
 .cal-cell.h2 .cal-heat { background: var(--accent); }
 .cal-cell.h3 .cal-heat { background: var(--ok); }
-.q-list { margin: 0; font-size: 14px; line-height: 1.7; }
+.q-list { margin: 0; font-size: 15px; line-height: 1.8; }
 .q-list dt { font-weight: bold; margin-top: 10px; color: var(--ink); }
 .q-list dt:first-child { margin-top: 0; }
 .q-list dd { margin: 2px 0 0; color: var(--ink); overflow-wrap: break-word; }
@@ -442,8 +442,64 @@ button.cal-cell { padding: 0; font-family: inherit; cursor: pointer; }
 button.cal-cell:hover { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .cal-cell.sel { background: var(--accent); color: #1D2B53; font-weight: bold; }
 .cal-cell.sel .cal-due { color: #1D2B53; }
-.cal-detail { margin-top: 8px; padding: 8px 10px; border: 2px dashed var(--border); font-size: 13px; line-height: 1.9; }
+.cal-detail { margin-top: 8px; padding: 8px 10px; border: 2px dashed var(--border); font-size: 14px; line-height: 1.9; }
 .cal-detail .px-btn { padding: 2px 8px; font-size: 12px; margin-left: 6px; }
 /* 三箱一行 */
 .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 899px) { .grid-3 { grid-template-columns: 1fr; } }
+
+/* ===== 怎么用卡（v2.2.3 追加）：人机配合一日循环动画 ===== */
+/* 周期 9s = 三阶段各 3s：①教练发包 ②学生作答 ③教练批改；全部 steps 硬切（像素风禁平滑） */
+.howto-body.hide { display: none; }
+.howto-role {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; border: 2px dashed var(--border);
+}
+.howto-role strong { font-size: 15px; margin-right: 8px; }
+.howto-role small { color: var(--muted); font-size: 13px; }
+.howto-track {
+  position: relative; display: flex; gap: 6px;
+  margin: 6px 0; padding-top: 18px; /* 给跳格的作业包留空 */
+}
+.howto-station {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 6px 2px; font-size: 12px;
+  background: var(--card); border: 2px solid var(--border);
+}
+.howto-courier { position: absolute; top: 0; left: 2%; color: var(--ink); }
+@keyframes ht-courier { /* 作业包跳格走完三段再瞬移回起点 */
+  0% { left: 2%; } 30% { left: 30%; }
+  33% { left: 35%; } 63% { left: 63%; }
+  66% { left: 68%; } 97% { left: 96%; }
+  100% { left: 2%; }
+}
+.howto-courier { animation: ht-courier 9s steps(8, end) infinite; }
+/* 阶段高亮：accent 实底 + 深字（两主题都可读） */
+@keyframes ht-a1 { 0%, 31% { background: var(--accent); color: #1D2B53; } 32%, 100% { background: var(--card); } }
+@keyframes ht-a2 { 0%, 32% { background: var(--card); } 33%, 64% { background: var(--accent); color: #1D2B53; } 65%, 100% { background: var(--card); } }
+@keyframes ht-a3 { 0%, 65% { background: var(--card); } 66%, 97% { background: var(--accent); color: #1D2B53; } 98%, 100% { background: var(--card); } }
+.howto-station.s1 { animation: ht-a1 9s steps(1, end) infinite; }
+.howto-station.s2 { animation: ht-a2 9s steps(1, end) infinite; }
+.howto-station.s3 { animation: ht-a3 9s steps(1, end) infinite; }
+/* 角色：教练在发包段与批改段亮，学生在作答段亮 */
+/* 高亮窗口必须同时切黑字（#1D2B53）：深色主题下黄底浅字看不清（2026-09-30 学生反馈） */
+@keyframes ht-coach { 0%, 31% { background: var(--accent); color: #1D2B53; } 32%, 65% { background: transparent; color: var(--ink); } 66%, 97% { background: var(--accent); color: #1D2B53; } 98%, 100% { background: transparent; color: var(--ink); } }
+@keyframes ht-student { 0%, 32% { background: transparent; color: var(--ink); } 33%, 64% { background: var(--accent); color: #1D2B53; } 65%, 100% { background: transparent; color: var(--ink); } }
+.howto-role.ht-coach { animation: ht-coach 9s steps(1, end) infinite; }
+.howto-role.ht-student { animation: ht-student 9s steps(1, end) infinite; }
+.howto-role.ht-coach strong, .howto-role.ht-coach small,
+.howto-role.ht-student strong, .howto-role.ht-student small { color: inherit; }
+.howto-steps { margin: 10px 0 6px; padding-left: 22px; font-size: 14px; line-height: 1.8; }
+.howto-foot { display: block; color: var(--muted); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) {
+  .howto-courier, .howto-station, .howto-role { animation: none !important; }
+}
+
+/* 日历切月与当日流水（v2.2.4 追加） */
+.cal-nav { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cal-nav strong { flex: 1; text-align: center; font-size: 15px; }
+.cal-nav .px-btn { padding: 2px 8px; font-size: 13px; }
+.cal-panel { margin-top: 0; }
+.cal-detail .cal-row { margin: 3px 0; font-size: 14px; line-height: 1.7; }
+.cal-detail .cal-row a { color: var(--link); }
+.cal-loading { color: var(--muted); font-size: 13px; }

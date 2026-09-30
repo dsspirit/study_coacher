@@ -76,3 +76,12 @@
 
 - 月历每天都是 `button.cal-cell`（padding:0、inherit 字体、hover dashed outline）；点选态 `.sel`（accent 实底 + #1D2B53 深字）；月历下 `.cal-detail` 虚线框当日详情条（13px，活动/到期/截止 + ghost 小按钮「打开当天日志」「去复习页」），默认选中今天。
 - `.grid-3`：三列栅格（三箱一行），窄屏塌单列。
+
+## 怎么用卡（v2.2.3 追加）
+
+- 首页第一张卡「使用指南」（2026-09-30 更名，教练行=Agent 教练、轨道首站=Agent）：教练行 → 四站点轨道（zcode/待答题/已答待批/已批改）→ 学生行 → 三条口令步骤 → 定位脚注；标题行右侧「收起/展开」（localStorage `lz-howto`）。
+- 动画：周期 9s 三阶段（发包/作答/批改）各 3s，全部 `steps(1|8,end)` 硬切——`.ht-coach`（教练发包+批改两窗口 accent 实底）、`.ht-student`（作答窗口）、站点 `.s1/.s2/.s3` 依次亮、`.howto-courier` 作业包沿轨道跳格（三段移动+瞬移回起点）。文字一律静态可读（铁律：动画只做高亮与位移）。
+- 新图标 `robot`（教练）/ `person`（学生）/ `box`（作业包站点）。
+- `prefers-reduced-motion: reduce` 时全部动画关闭。
+- 可读性修订（同日）：`.cal-wrap` 断点 899→1279px（中窄窗口单列，根治五问右栏被挤成窄竖条）；`.q-list` 14→15px/1.8；`.cal-detail` 13→14px。
+- 月历切月与当日流水（v2.2.4）：`.cal-nav`（◀ 标题 ▶ 今天，今天按钮当月禁用）；点选日期 → `.cal-panel` 异步拉 `/api/day` 渲染 `.cal-detail` 流水（🍅 番茄逐条/交：/批： 作业链接+徽章/到期+去复习/打开当天日志/截止 ⚑/无记录）；切月默认选今天或 1 号；数据层 calendar_activity 改全量、新 day_activity。

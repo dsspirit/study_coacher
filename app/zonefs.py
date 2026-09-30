@@ -117,21 +117,21 @@ def _queue_rows(queue_path):
     return sorted(rows, key=lambda r: r[2])
 
 
-def calendar_activity(zone, queue_path=None, ahead_days=30, back_days=62):
-    """首页月历数据：过去活动 + 未来到期分布。
+def calendar_activity(zone, queue_path=None, ahead_days=None, back_days=None):
+    """首页月历数据：过去活动 + 未来到期分布（默认全量，支持任意年月切换）。
 
     days：{date: {pomo, answered, graded}}——番茄钟数来自 学习日志/<date>.md 的
     番茄钟节行数；已答待批/已批改按文件 mtime 所在日计数（answered=提交时刻，
-    graded=批改写回时刻），只保留最近 back_days 天。
-    due_ahead：{date: count}——从今天起 ahead_days 天内到期的进行中卡数（含今天）。
+    graded=批改写回时刻）。back_days=None 返回全部历史。
+    due_ahead：{date: count}——今天（含）之后到期的进行中卡数；ahead_days=None 不设上限。
     """
     zone = Path(zone)
     today = date.today()
-    cutoff = today.toordinal() - back_days
+    cutoff = None if back_days is None else today.toordinal() - back_days
     days = {}
 
     def slot(d):
-        if d.toordinal() < cutoff:
+        if cutoff is not None and d.toordinal() < cutoff:
             return None
         key = d.isoformat()
         return days.setdefault(key, {"pomo": 0, "answered": 0, "graded": 0})
@@ -160,15 +160,52 @@ def calendar_activity(zone, queue_path=None, ahead_days=30, back_days=62):
 
     due_ahead = {}
     if queue_path:
-        limit = (today.toordinal() + ahead_days)
+        limit = None if ahead_days is None else today.toordinal() + ahead_days
         for _t, _l, nxt in _queue_rows(queue_path):
             try:
                 d = date.fromisoformat(nxt)
             except ValueError:
                 continue
-            if today.toordinal() <= d.toordinal() <= limit:
+            if d.toordinal() >= today.toordinal() and (limit is None or d.toordinal() <= limit):
                 due_ahead[nxt] = due_ahead.get(nxt, 0) + 1
     return {"days": days, "due_ahead": due_ahead}
+
+
+def day_activity(zone, queue_path, date_str):
+    """某日执行明细（首页日历点选）：番茄钟列表 + 当天提交/批改的作业 + 到期卡数。
+
+    归属规则：番茄=当天学习日志的番茄钟行；提交=已答待批 mtime 当天；批改=已批改
+    mtime 当天（批改写回会刷新 mtime，即文件最终所在箱的最后动作）；到期=队列里
+    next = 该日的进行中卡（对未来是预告，对历史是该日的到期安排）。
+    """
+    out = {"date": date_str, "pomo": [], "submitted": [], "graded": [], "due": 0, "log": False}
+    zone = Path(zone)
+    log = zone / LOG_DIR / (date_str + ".md")
+    if log.is_file():
+        out["log"] = True
+        text = log.read_text(encoding="utf-8")
+        for m in re.finditer(r"(?m)^- (\d{2}:\d{2})–(\d{2}:\d{2}) · (\d+) min · (.*)$", text):
+            out["pomo"].append({"start": m.group(1), "end": m.group(2),
+                                "min": int(m.group(3)), "label": m.group(4).strip()})
+    for dir_name, key in ((ANSWERED, "submitted"), (GRADED, "graded")):
+        d = zone / dir_name
+        if not d.is_dir():
+            continue
+        for p in sorted(d.glob("*.md")):
+            if p.name.startswith("_"):
+                continue
+            if date.fromtimestamp(p.stat().st_mtime).isoformat() != date_str:
+                continue
+            try:
+                meta, _body = parse_frontmatter(p.read_text(encoding="utf-8"))
+            except OSError:
+                continue
+            out[key].append({"dir": dir_name, "file": p.name,
+                             "title": meta.get("title") or p.stem,
+                             "type": meta.get("type", "quiz")})
+    if queue_path:
+        out["due"] = sum(1 for _t, _l, nxt in _queue_rows(queue_path) if nxt == date_str)
+    return out
 
 
 def resolve_note(root, name):
