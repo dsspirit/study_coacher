@@ -52,3 +52,8 @@
 - `.recall-hint`：挣扎提示条（10 秒没动笔出现，一动笔消失）：muted 字 + 2px accent 虚线边。
 - `.recall-locked` / `.recall-locked-text`：已交卷卡只读回显：`--bg` 底 + 2px border 虚线，正文 pre-wrap 15px。
 - 复用：卡块用 `.q-block`/`.q-head`，徽章/按钮/计时全部走既有 `.px-badge`/`.px-btn`。
+
+## 数学公式（v2.1.1 追加）
+
+- 渲染：md.js 检测正文含 `$` 时懒加载本地 KaTeX（`static/vendor/katex/`），对 body 跑 auto-render：`$$…$$` 展示（居中）、`$…$` 行内；`ignoredClasses: ['mmd']` 保护 mermaid 源码；`throwOnError: false`（语法错渲染红色错误段不炸页）；加载失败原文保留（天然降级）。
+- 主题：KaTeX 文字颜色继承环境（`--ink`），深浅主题自动可读，无需为公式写 token；公式字体是 KaTeX 自带（Computer Modern 系），属数学专业排版，不违反「正文可读字体」铁律。

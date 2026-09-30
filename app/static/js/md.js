@@ -3,7 +3,8 @@
 //   # 标题（#→h2、##→h3、更深一律 h4）、--- 分隔线、GFM 表格、> 引用块、
 //   -/* 无序列表、1. 有序列表、``` 围栏代码（lang=mermaid 输出 .mmd 并懒加载
 //   本地 /static/vendor/mermaid.min.js）、**粗体**、`code`、[[wikilink]]、
-//   [文字](url)。输入一律视为不可信文本：先整体转义再处理（含 '>' 变 '&gt;'）。
+//   [文字](url)、$行内数学 / $$展示数学（懒加载本地 KaTeX，见文尾）。
+//   输入一律视为不可信文本：先整体转义再处理（含 '>' 变 '&gt;'）。
 
 function esc(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -183,5 +184,56 @@ export function mdToHtml(md) {
   const stripped = String(md == null ? '' : md).replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
   const html = blocks(esc(stripped));
   if (html.includes('class="mmd"')) setTimeout(hydrateMermaid, 0);
+  if (html.includes('$')) setTimeout(hydrateMath, 0); // vault 讲义含 LaTeX：Obsidian 能渲染，这里补同款
   return html;
+}
+
+// ---------- 数学懒加载：正文出现 '$' 时注入本地 KaTeX，对整个 body 跑 auto-render ----------
+// 为什么不用占位再替换：innerHTML 挂上 DOM 后文本节点已还原成原始 LaTeX
+// （转义只发生在 HTML 字符串层），auto-render 直接吃原文；加载失败时原文
+// 原样留在页面里，天然降级，无需回滚。渲染幂等（渲染后的 KaTeX span 里
+// 不再有裸定界符），重复调用无害——换页/重渲染都靠它兜底。
+
+let texLib = null; // css+katex+auto-render 三件的加载 Promise（单例）
+
+function ensureKatex() {
+  if (window.renderMathInElement) return Promise.resolve();
+  if (!texLib) {
+    texLib = new Promise((resolve, reject) => {
+      const css = document.createElement('link');
+      css.rel = 'stylesheet';
+      css.href = '/static/vendor/katex/katex.min.css';
+      css.onerror = () => reject(new Error('KaTeX 样式加载失败'));
+      document.head.appendChild(css);
+      const core = document.createElement('script');
+      core.src = '/static/vendor/katex/katex.min.js';
+      core.onload = () => {
+        const ar = document.createElement('script');
+        ar.src = '/static/vendor/katex/auto-render.min.js';
+        ar.onload = () => resolve();
+        ar.onerror = () => reject(new Error('auto-render 脚本加载失败'));
+        document.head.appendChild(ar);
+      };
+      core.onerror = () => reject(new Error('KaTeX 脚本加载失败'));
+      document.head.appendChild(core);
+    });
+  }
+  return texLib;
+}
+
+function hydrateMath() {
+  const body = document.body;
+  if (!body || !body.textContent.includes('$')) return;
+  ensureKatex().then(() => {
+    try {
+      window.renderMathInElement(body, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '$', right: '$', display: false },
+        ],
+        ignoredClasses: ['mmd'], // mermaid 源码不碰
+        throwOnError: false,     // 公式语法错渲染成红色错误段，不炸整页
+      });
+    } catch { /* 静默：原文已是最佳降级 */ }
+  }).catch(() => { /* vendor 缺失/加载失败：保留原文，不重试到成功为止 */ });
 }
